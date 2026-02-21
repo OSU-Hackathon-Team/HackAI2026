@@ -28,15 +28,75 @@ INPUT_DIM = 178
 SEQUENCE_LENGTH = 30
 WINDOW_SIZE_MS = 1000
 
-# Global Whispers Model Load
+# Global AI Initializations
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-try:
-    print("Loading Whisper model...")
-    whisper_model = whisper.load_model("tiny", device=device)
-    print("Whisper model loaded!")
-except Exception as e:
-    whisper_model = None
-    print(f"Failed to load whisper model: {e}")
+
+# Visual model (LAZY)
+_visual_model = None
+
+def get_visual_model():
+    global _visual_model
+    if _visual_model is None:
+        try:
+            _visual_model = VisualConfidenceModel(input_dim=INPUT_DIM)
+            if os.path.exists(MODEL_PATH):
+                _visual_model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+            _visual_model.to(device).eval()
+        except Exception as e:
+            print(f"Warning: Visual model init failed. {e}")
+    return _visual_model
+
+# MediaPipe Initializations (LAZY to avoid initialization crashes on import)
+_face_landmarker = None
+_hand_landmarker = None
+
+def get_landmarkers():
+    global _face_landmarker, _hand_landmarker
+    if _face_landmarker is None or _hand_landmarker is None:
+        try:
+            face_opts = vision.FaceLandmarkerOptions(
+                base_options=python.BaseOptions(model_asset_path=FACE_TASK_PATH),
+                output_face_blendshapes=True,
+                num_faces=1,
+                running_mode=vision.RunningMode.IMAGE)
+            _face_landmarker = vision.FaceLandmarker.create_from_options(face_opts)
+
+            hand_opts = vision.HandLandmarkerOptions(
+                base_options=python.BaseOptions(model_asset_path=HAND_TASK_PATH),
+                num_hands=2,
+                running_mode=vision.RunningMode.IMAGE)
+            _hand_landmarker = vision.HandLandmarker.create_from_options(hand_opts)
+        except Exception as e:
+            print(f"Warning: MediaPipe init failed. {e}")
+    return _face_landmarker, _hand_landmarker
+
+# Global Whisper Model (Disabled to avoid WinError 6 on Windows, using OpenAI API instead)
+whisper_model = None
+# try:
+#     print("Loading Whisper model...")
+#     whisper_model = whisper.load_model("tiny", device=device)
+#     print("Whisper model loaded!")
+# except Exception as e:
+#     whisper_model = None
+#     print(f"Failed to load whisper model: {e}")
+
+def process_mediapipe_results(face_result, hand_result):
+    bs = [0.0] * 52
+    if face_result and face_result.face_blendshapes:
+        bs = [b.score for b in face_result.face_blendshapes[0]]
+
+    lh = np.zeros(63)
+    rh = np.zeros(63)
+    if hand_result and hand_result.hand_landmarks:
+        for i, hand_lms in enumerate(hand_result.hand_landmarks):
+            if i < len(hand_result.handedness):
+                side = hand_result.handedness[i][0].category_name
+                landmarks = np.array([[lm.x, lm.y, lm.z] for lm in hand_lms]).flatten()
+                if side.lower() == 'left':
+                    lh = landmarks
+                else:
+                    rh = landmarks
+    return np.concatenate([bs, lh, rh])
 
 class VideoStreamProcessor:
     def __init__(self, track, datachannel_manager):
@@ -44,53 +104,13 @@ class VideoStreamProcessor:
         self.datachannel_manager = datachannel_manager
         self.feature_history = []
         self.device = device
-
-        self.model = VisualConfidenceModel(input_dim=INPUT_DIM)
-        if os.path.exists(MODEL_PATH):
-            self.model.load_state_dict(torch.load(MODEL_PATH, map_location=self.device))
-        self.model.to(self.device).eval()
-
-        self.init_mediapipe()
+        self.model = get_visual_model() # Use lazy global
+        self.face_landmarker, self.hand_landmarker = get_landmarkers()
         self.task = asyncio.create_task(self._process_stream())
 
-    def init_mediapipe(self):
-        try:
-            face_base_options = python.BaseOptions(model_asset_path=FACE_TASK_PATH)
-            face_options = vision.FaceLandmarkerOptions(
-                base_options=face_base_options,
-                output_face_blendshapes=True,
-                num_faces=1,
-                running_mode=vision.RunningMode.VIDEO)
-            self.face_landmarker = vision.FaceLandmarker.create_from_options(face_options)
-
-            hand_base_options = python.BaseOptions(model_asset_path=HAND_TASK_PATH)
-            hand_options = vision.HandLandmarkerOptions(
-                base_options=hand_base_options,
-                num_hands=2,
-                running_mode=vision.RunningMode.VIDEO)
-            self.hand_landmarker = vision.HandLandmarker.create_from_options(hand_options)
-        except Exception as e:
-            print(f"Warning: Mediapipe init failed. {e}")
-            self.face_landmarker = None
-            self.hand_landmarker = None
-
     def process_mediapipe_results(self, face_result, hand_result):
-        bs = [0.0] * 52
-        if face_result and face_result.face_blendshapes:
-            bs = [b.score for b in face_result.face_blendshapes[0]]
-
-        lh = np.zeros(63)
-        rh = np.zeros(63)
-        if hand_result and hand_result.hand_landmarks:
-            for i, hand_lms in enumerate(hand_result.hand_landmarks):
-                if i < len(hand_result.handedness):
-                    side = hand_result.handedness[i][0].category_name
-                    landmarks = np.array([[lm.x, lm.y, lm.z] for lm in hand_lms]).flatten()
-                    if side.lower() == 'left':
-                        lh = landmarks
-                    else:
-                        rh = landmarks
-        return np.concatenate([bs, lh, rh])
+        # Delegate to global function
+        return process_mediapipe_results(face_result, hand_result)
 
     def do_inference(self):
         if len(self.feature_history) < 10: return 0.5
@@ -154,8 +174,9 @@ class VideoStreamProcessor:
 
     def _detect_and_buffer(self, mp_image, timestamp_ms):
         try:
-            face_result = self.face_landmarker.detect_for_video(mp_image, timestamp_ms)
-            hand_result = self.hand_landmarker.detect_for_video(mp_image, timestamp_ms)
+            if not self.face_landmarker or not self.hand_landmarker: return
+            face_result = self.face_landmarker.detect(mp_image)
+            hand_result = self.hand_landmarker.detect(mp_image)
             feat = self.process_mediapipe_results(face_result, hand_result)
             if feat is not None:
                 self.feature_history.append((timestamp_ms, feat))
