@@ -99,12 +99,22 @@ function CameraPanel({
   micOn,
   onToggleCamera,
   onToggleMic,
+  isRecording,
+  isProcessing,
+  isSpeaking,
+  onStartRecording,
+  onStopRecording
 }: {
-  videoRef: React.RefObject<HTMLVideoElement>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
   cameraOn: boolean;
   micOn: boolean;
   onToggleCamera: () => void;
   onToggleMic: () => void;
+  isRecording: boolean;
+  isProcessing: boolean;
+  isSpeaking: boolean;
+  onStartRecording: () => void;
+  onStopRecording: () => void;
 }) {
   return (
     <div style={{ position: "relative", width: "100%", flex: 1, background: "#000", overflow: "hidden" }}>
@@ -115,6 +125,38 @@ function CameraPanel({
         playsInline
         style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)", display: "block", opacity: cameraOn ? 1 : 0, transition: "opacity 0.3s ease" }}
       />
+
+      {cameraOn && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <button
+            onClick={isRecording ? onStopRecording : onStartRecording}
+            disabled={isProcessing || isSpeaking}
+            style={{
+              pointerEvents: "auto",
+              padding: "0.8rem 1.6rem",
+              borderRadius: "99px",
+              border: "none",
+              background: isRecording ? "var(--danger)" : "var(--accent)",
+              color: "#080b12",
+              fontWeight: 800,
+              fontSize: "0.85rem",
+              fontFamily: "var(--font-mono)",
+              cursor: (isProcessing || isSpeaking) ? "not-allowed" : "pointer",
+              boxShadow: isRecording ? "0 0 30px rgba(255,77,109,0.4)" : "0 0 30px rgba(0,229,255,0.3)",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.6rem",
+              transition: "all 0.3s ease",
+              transform: isRecording ? "scale(1.05)" : "scale(1)",
+              opacity: (isProcessing || isSpeaking) ? 0.7 : 1
+            }}
+          >
+            {isRecording && <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#fff", animation: "pulse-ring 1.2s infinite" }} />}
+            {isProcessing ? "ANALYZING..." : isSpeaking ? "AI SPEAKING..." : isRecording ? "STOP & SUBMIT" : "RECORD ANSWER"}
+          </button>
+        </div>
+      )}
+
       {!cameraOn && (
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0a0f1a", gap: "0.5rem" }}>
           <div style={{ color: "var(--muted)", opacity: 0.4 }}><CameraIcon off={true} /></div>
@@ -174,9 +216,9 @@ function CountdownOverlay({ countdown }: { countdown: number }) {
 function ConnectionBadge({ status }: { status: "connecting" | "connected" | "failed" | "mock" }) {
   const config = {
     connecting: { color: "#febc2e", label: "CONNECTING TO BACKEND" },
-    connected:  { color: "var(--success)", label: "BACKEND CONNECTED" },
-    failed:     { color: "var(--danger)", label: "USING MOCK DATA" },
-    mock:       { color: "var(--muted)", label: "MOCK MODE" },
+    connected: { color: "var(--success)", label: "BACKEND CONNECTED" },
+    failed: { color: "var(--danger)", label: "USING MOCK DATA" },
+    mock: { color: "var(--muted)", label: "MOCK MODE" },
   }[status];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
@@ -196,25 +238,190 @@ export default function InterviewPage() {
     transcript, addTranscriptEntry, addBiometricPoint,
     liveAlert, setLiveAlert,
     startInterview,
+    sessionId, resumeText, jobText
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [gazeScore, setGazeScore]           = useState(88);
-  const [confidence, setConfidence]         = useState(82);
-  const [fidget, setFidget]                 = useState(12);
-  const [isSpeaking, setIsSpeaking]         = useState(false);
-  const [isReady, setIsReady]               = useState(false);
-  const [countdown, setCountdown]           = useState<number | null>(null);
-  const [connStatus, setConnStatus]         = useState<"connecting" | "connected" | "failed" | "mock">("connecting");
-  const [cameraOn, setCameraOn]             = useState(false);
-  const [micOn, setMicOn]                   = useState(false);
+  const [gazeScore, setGazeScore] = useState(88);
+  const [confidence, setConfidence] = useState(82);
+  const [fidget, setFidget] = useState(12);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [connStatus, setConnStatus] = useState<"connecting" | "connected" | "failed" | "mock">("connecting");
+  const [cameraOn, setCameraOn] = useState(false);
+  const [micOn, setMicOn] = useState(false);
 
-  const transcriptRef  = useRef<HTMLDivElement>(null);
-  const localVideoRef  = useRef<HTMLVideoElement>(null);
-  const streamRef      = useRef<MediaStream | null>(null);
-  const pcRef          = useRef<RTCPeerConnection | null>(null);
-  const dcRef          = useRef<RTCDataChannel | null>(null);
-  const interviewStartedRef = useRef(false); // guard so startInterview only fires once
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [questionIndex, setQuestionIndex] = useState(0);
+
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const dcRef = useRef<RTCDataChannel | null>(null);
+  const interviewStartedRef = useRef(false);
+
+  const audioRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const videoChunksRef = useRef<Blob[]>([]);
+
+  // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
+  const processTurn = async (audioBlob: Blob | null, videoBlob: Blob | null) => {
+    if (!sessionId) return;
+    if (!audioBlob) {
+      alert("No audio recorded. Please ensure your microphone is enabled and try again.");
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      // 1. Send to stream-process
+      const formData = new FormData();
+      formData.append('audio', audioBlob);
+      if (videoBlob) formData.append('video', videoBlob);
+      formData.append('session_id', sessionId);
+      formData.append('timestamp_sec', elapsedSeconds.toString());
+
+      const streamRes = await fetch('http://127.0.0.1:8080/api/stream-process', {
+        method: 'POST',
+        body: formData,
+      });
+      const streamData = await streamRes.json();
+
+      if (streamData.text) {
+        addTranscriptEntry({ time: elapsedSeconds, speaker: 'user', text: streamData.text });
+
+        // 2. Chat for next question
+        const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: streamData.text,
+            question_index: questionIndex,
+            session_id: sessionId,
+            metrics: streamData.metrics,
+            resume_text: resumeText,
+            job_text: jobText
+          }),
+        });
+        const chatData = await chatRes.json();
+
+        if (chatData.ai_response) {
+          setIsSpeaking(true);
+          addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text: chatData.ai_response });
+          setQuestionIndex(chatData.next_index);
+
+          // 3. TTS
+          const ttsRes = await fetch('http://127.0.0.1:8080/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: chatData.ai_response }),
+          });
+          const ttsBlob = await ttsRes.blob();
+          const audio = new Audio(URL.createObjectURL(ttsBlob));
+          audio.onended = () => setIsSpeaking(false);
+          audio.play();
+        }
+      }
+    } catch (err) {
+      console.error("Turn processing failed:", err);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // ─── Recording Controls ───────────────────────────────────────────────────
+  const startRecording = () => {
+    if (!streamRef.current) {
+      alert("No media stream found. Please enable your camera or microphone first.");
+      return;
+    }
+
+    try {
+      const getMimeType = (type: 'audio' | 'video') => {
+        const types = type === 'audio'
+          ? ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', 'audio/mp4']
+          : ['video/webm;codecs=vp8,opus', 'video/webm;codecs=h264,opus', 'video/webm', 'video/mp4'];
+        return types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+      };
+
+      const audioMime = getMimeType('audio');
+      const videoMime = getMimeType('video');
+
+      console.log(`[MediaRecorder] Attempting start. Audio Mime: ${audioMime}, Video Mime: ${videoMime}`);
+
+      // Create specific streams for each recorder to avoid "NotSupportedError" if a track is missing
+      const audioTracks = streamRef.current.getAudioTracks();
+      const videoTracks = streamRef.current.getVideoTracks();
+
+      if (audioTracks.length === 0 && videoTracks.length === 0) {
+        throw new Error("No active audio or video tracks found to record.");
+      }
+
+      // Initialize audio recorder if audio tracks exist
+      if (audioTracks.length > 0) {
+        audioChunksRef.current = [];
+        const audioStream = new MediaStream(audioTracks);
+        const audioRecorder = new MediaRecorder(audioStream, audioMime ? { mimeType: audioMime } : {});
+        audioRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+        audioRecorder.start();
+        audioRecorderRef.current = audioRecorder;
+      }
+
+      // Initialize video recorder if video tracks exist
+      if (videoTracks.length > 0) {
+        videoChunksRef.current = [];
+        const videoStream = new MediaStream(videoTracks);
+        const videoRecorder = new MediaRecorder(videoStream, videoMime ? { mimeType: videoMime } : {});
+        videoRecorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
+        videoRecorder.start();
+        videoRecorderRef.current = videoRecorder;
+      }
+
+      setIsRecording(true);
+      console.log("[MediaRecorder] Recording started successfully.");
+    } catch (err: any) {
+      console.error("[MediaRecorder] Startup failed:", err);
+      // Clean up if partial start
+      [audioRecorderRef, videoRecorderRef].forEach(ref => {
+        if (ref.current && ref.current.state === "recording") ref.current.stop();
+        ref.current = null;
+      });
+      alert(`Could not start recording: ${err.message || err.name || "Unknown error"}. Check console for details.`);
+    }
+  };
+
+  const stopRecording = () => {
+    const hasAudio = !!audioRecorderRef.current;
+    const hasVideo = !!videoRecorderRef.current;
+    const activeRecorders = [audioRecorderRef.current, videoRecorderRef.current].filter(r => r !== null);
+
+    if (activeRecorders.length === 0) {
+      setIsRecording(false);
+      return;
+    }
+
+    let stoppedCount = 0;
+    const onRecorderStop = () => {
+      stoppedCount++;
+      if (stoppedCount === activeRecorders.length) {
+        const audioBlob = hasAudio ? new Blob(audioChunksRef.current, { type: audioChunksRef.current[0]?.type || 'audio/webm' }) : null;
+        const videoBlob = hasVideo ? new Blob(videoChunksRef.current, { type: videoChunksRef.current[0]?.type || 'video/webm' }) : null;
+        processTurn(audioBlob, videoBlob);
+      }
+    };
+
+    activeRecorders.forEach(r => {
+      r!.onstop = onRecorderStop;
+      r!.stop();
+    });
+
+    audioRecorderRef.current = null;
+    videoRecorderRef.current = null;
+    setIsRecording(false);
+  };
 
   // ── Start timer + interview when camera or mic first turns on ─────────────
   const maybeStartInterview = () => {
@@ -223,63 +430,81 @@ export default function InterviewPage() {
     startInterview();
     setIsReady(true);
     startWebRTC();
-    startMockTranscript();
   };
 
   // ── Toggle camera ─────────────────────────────────────────────────────────
   const handleToggleCamera = async () => {
-    if (!streamRef.current) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    try {
+      if (!streamRef.current) {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: micOn });
         streamRef.current = stream;
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-        // Leave audio enabled state consistent with micOn
-        stream.getAudioTracks().forEach(t => { t.enabled = micOn; });
         setCameraOn(true);
         maybeStartInterview();
-      } catch (err) {
-        console.error("Camera permission denied:", err);
+      } else {
+        const videoTracks = streamRef.current.getVideoTracks();
+        if (videoTracks.length === 0) {
+          // If stream exists but no video track, request it
+          const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const newTrack = videoStream.getVideoTracks()[0];
+          streamRef.current.addTrack(newTrack);
+          setCameraOn(true);
+        } else {
+          const newState = !cameraOn;
+          videoTracks.forEach(t => { t.enabled = newState; });
+          setCameraOn(newState);
+        }
+        if (!cameraOn) maybeStartInterview();
       }
-      return;
+    } catch (err: any) {
+      console.error("Camera access failed:", err);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        alert("Camera permission denied. Please enable it in your browser settings and refresh.");
+      } else {
+        alert(`Camera error: ${err.message || "Unknown error"}`);
+      }
     }
-    const videoTracks = streamRef.current.getVideoTracks();
-    if (videoTracks.length === 0) return;
-    const newState = !cameraOn;
-    videoTracks.forEach(t => { t.enabled = newState; });
-    setCameraOn(newState);
-    if (newState) maybeStartInterview();
   };
 
   // ── Toggle mic ────────────────────────────────────────────────────────────
   const handleToggleMic = async () => {
-    if (!streamRef.current) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    try {
+      if (!streamRef.current) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: cameraOn });
         streamRef.current = stream;
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-        // Leave video enabled state consistent with cameraOn
-        stream.getVideoTracks().forEach(t => { t.enabled = cameraOn; });
         setMicOn(true);
         maybeStartInterview();
-      } catch (err) {
-        console.error("Mic permission denied:", err);
+      } else {
+        const audioTracks = streamRef.current.getAudioTracks();
+        if (audioTracks.length === 0) {
+          // If stream exists but no audio track, request it
+          const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const newTrack = audioStream.getAudioTracks()[0];
+          streamRef.current.addTrack(newTrack);
+          setMicOn(true);
+        } else {
+          const newState = !micOn;
+          audioTracks.forEach(t => { t.enabled = newState; });
+          setMicOn(newState);
+        }
+        if (!micOn) maybeStartInterview();
       }
-      return;
+    } catch (err: any) {
+      console.error("Mic access failed:", err);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        alert("Microphone permission denied. Please enable it in your browser settings and refresh.");
+      } else {
+        alert(`Microphone error: ${err.message || "Unknown error"}`);
+      }
     }
-    const audioTracks = streamRef.current.getAudioTracks();
-    if (audioTracks.length === 0) return;
-    const newState = !micOn;
-    audioTracks.forEach(t => { t.enabled = newState; });
-    setMicOn(newState);
-    if (newState) maybeStartInterview();
   };
 
   // ── WebRTC ────────────────────────────────────────────────────────────────
   const startWebRTC = async () => {
     if (!streamRef.current) {
-      console.warn("%c[WebRTC] ✗ No media stream — falling back to mock data", "color:#ff4d6d");
+      console.warn("%c[WebRTC] ✗ No media stream — falling back to mock UI (no data)", "color:#ff4d6d");
       setConnStatus("failed");
-      startMockStreams();
       return;
     }
     console.log("%c[WebRTC] Starting connection to backend...", "color:#febc2e;font-weight:bold");
@@ -346,9 +571,8 @@ export default function InterviewPage() {
       console.log("%c[WebRTC] ✓ Handshake complete", "color:#00e5ff;font-weight:bold");
 
     } catch (err) {
-      console.error("%c[WebRTC] ✗ Setup failed — falling back to mock:", "color:#ff4d6d;font-weight:bold", err);
+      console.error("%c[WebRTC] ✗ Setup failed — falling back to mock UI:", "color:#ff4d6d;font-weight:bold", err);
       setConnStatus("failed");
-      startMockStreams();
     }
   };
 
@@ -389,32 +613,7 @@ export default function InterviewPage() {
     return () => { streamRef.current?.getTracks().forEach(t => t.stop()); };
   }, []);
 
-  // ── Mock streams ──────────────────────────────────────────────────────────
-  const startMockStreams = () => {
-    MOCK_BIOMETRICS.forEach(point => {
-      setTimeout(() => { setGazeScore(point.gazeScore); setConfidence(point.confidence); setFidget(point.fidgetIndex); addBiometricPoint(point); }, point.time * 1000);
-    });
-    MOCK_TRANSCRIPT.forEach(entry => {
-      setTimeout(() => {
-        setIsSpeaking(entry.speaker === "interviewer");
-        addTranscriptEntry(entry);
-        if (entry.speaker === "interviewer") setTimeout(() => setIsSpeaking(false), 5000);
-      }, entry.time * 1000);
-    });
-    MOCK_LIVE_ALERTS.forEach(({ delay, message }) => {
-      setTimeout(() => { setLiveAlert(message); setTimeout(() => setLiveAlert(null), 4000); }, delay);
-    });
-    setConnStatus("mock");
-  };
-
-  const startMockTranscript = () => {
-    MOCK_TRANSCRIPT.filter(e => e.speaker === "interviewer").forEach(entry => {
-      setTimeout(() => { setIsSpeaking(true); addTranscriptEntry(entry); setTimeout(() => setIsSpeaking(false), 5000); }, entry.time * 1000);
-    });
-    MOCK_LIVE_ALERTS.forEach(({ delay, message }) => {
-      setTimeout(() => { setLiveAlert(message); setTimeout(() => setLiveAlert(null), 4000); }, delay);
-    });
-  };
+  // Removed Mock Logic
 
   // ── Finish ────────────────────────────────────────────────────────────────
   const handleFinish = () => {
@@ -477,13 +676,18 @@ export default function InterviewPage() {
               micOn={micOn}
               onToggleCamera={handleToggleCamera}
               onToggleMic={handleToggleMic}
+              isRecording={isRecording}
+              isProcessing={isProcessing}
+              isSpeaking={isSpeaking}
+              onStartRecording={startRecording}
+              onStopRecording={stopRecording}
             />
           </div>
 
           <div className="card" style={{ display: "flex", justifyContent: "space-around", padding: "1.25rem" }}>
-            <ScoreRing label="GAZE"       value={gazeScore}    color="var(--accent)"  />
-            <ScoreRing label="CONFIDENCE" value={confidence}   color="var(--accent2)" />
-            <ScoreRing label="CALM"       value={100 - fidget} color="var(--success)" />
+            <ScoreRing label="GAZE" value={gazeScore} color="var(--accent)" />
+            <ScoreRing label="CONFIDENCE" value={confidence} color="var(--accent2)" />
+            <ScoreRing label="CALM" value={100 - fidget} color="var(--success)" />
           </div>
         </div>
 

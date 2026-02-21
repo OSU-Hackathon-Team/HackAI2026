@@ -6,7 +6,7 @@ import Link from "next/link";
 
 export default function UploadPage() {
   const router = useRouter();
-  const { setResumeText, setJobText, setPhase, setSessionId } = useInterviewStore();
+  const { setResumeText, setJobText, setPhase, setSessionId, addTranscriptEntry } = useInterviewStore();
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [jobText, setJobTextLocal] = useState("");
@@ -31,13 +31,40 @@ export default function UploadPage() {
   const handleSubmit = async () => {
     if (!resumeFile || !jobText.trim()) return;
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 1800));
-    const mockSessionId = `session-${Date.now()}`;
-    setResumeText(resumeFile.name);
-    setJobText(jobText);
-    setSessionId(mockSessionId);
-    setPhase("connecting");
-    router.push("/interview");
+
+    try {
+      const formData = new FormData();
+      formData.append("resume", resumeFile);
+      formData.append("job_description", jobText);
+
+      const res = await fetch("http://127.0.0.1:8080/api/init-session", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Failed to initialize session");
+
+      const data = await res.json();
+
+      setResumeText(data.resume_text);
+      setJobText(data.job_text);
+      setSessionId(data.session_id);
+
+      // Store the first question in the transcript
+      addTranscriptEntry({
+        time: 0,
+        speaker: "interviewer",
+        text: data.first_question
+      });
+
+      setPhase("connecting");
+      router.push("/interview");
+    } catch (error) {
+      console.error("Initialization error:", error);
+      alert("Failed to start interview. Is the backend running on port 8080?");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const canSubmit = resumeFile && jobText.trim().length > 20;

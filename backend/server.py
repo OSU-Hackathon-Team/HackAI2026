@@ -1,5 +1,7 @@
-import argparse
 import sys
+import argparse
+import pypdf
+import io
 import asyncio
 import json
 import logging
@@ -9,6 +11,8 @@ import tempfile
 import numpy as np
 import librosa
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Handle environment and search paths
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -50,7 +54,7 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 
-INTERVIEW_QUESTIONS = [
+FALLBACK_QUESTIONS = [
     "Welcome to Ace It. To start, can you tell me a bit about your experience with AI and machine learning?",
     "That's interesting. How do you approach debugging a complex problem in your code?",
     "Great. Finally, why are you interested in this specific project for HackAI?"
@@ -59,6 +63,18 @@ INTERVIEW_QUESTIONS = [
 print("Defining helpers...")
 
 # --- HELPERS ---
+
+def extract_text_from_pdf(pdf_bytes):
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+        return text.strip()
+    except Exception as e:
+        logging.error(f"PDF extraction error: {e}")
+        return ""
+
 
 def extract_video_metrics(video_path):
     try:
@@ -193,6 +209,48 @@ async def stream_process(request):
     finally:
         if os.path.exists(temp_audio): os.remove(temp_audio)
 
+async def init_session(request):
+    reader = await request.multipart()
+    resume_text = ""
+    job_description = ""
+    
+    while True:
+        part = await reader.next()
+        if part is None: break
+        if part.name == 'resume':
+            filename = part.filename
+            content = await part.read()
+            if filename.endswith('.pdf'):
+                resume_text = extract_text_from_pdf(content)
+            else:
+                resume_text = content.decode('utf-8', errors='ignore')
+        elif part.name == 'job_description':
+            job_description = (await part.read()).decode('utf-8')
+
+    system_prompt = (
+        "You are an expert AI Interviewer. Based on the candidate's resume and the job description, "
+        "introduce yourself briefly and ask the first most relevant interview question. "
+        "Keep it professional and concise (under 3 sentences)."
+    )
+    user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
+    
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        )
+        first_question = completion.choices[0].message.content
+        session_id = f"session-{uuid.uuid4().hex[:8]}"
+        
+        return web.json_response({
+            "session_id": session_id,
+            "first_question": first_question,
+            "resume_text": resume_text,
+            "job_text": job_description
+        })
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 async def chat(request):
     data = await request.json()
     user_text = data.get('text', '')
@@ -200,15 +258,18 @@ async def chat(request):
     session_id = data.get('session_id')
     metrics = data.get('metrics', {})
 
+    resume_text = data.get('resume_text', '')
+    job_text = data.get('job_text', '')
+
     system_prompt = (
         "You are a professional technical interviewer for AceIt. "
         "Keep your response concise, encouraging, and under 3 sentences. "
         "First, react to the candidate's answer in exactly 1 sentence. "
+        f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}..."
     )
     
-    if question_index < len(INTERVIEW_QUESTIONS):
-        next_question = INTERVIEW_QUESTIONS[question_index]
-        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then ask this next question: '{next_question}'."
+    if question_index < 5: # Limit to 5 dynamic questions for now
+        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then ask a relevant follow-up question based on the JD and Resume provided."
         is_finished = False
         next_index = question_index + 1
     else:
@@ -224,7 +285,8 @@ async def chat(request):
         ai_response = completion.choices[0].message.content
         
         if session_id:
-            q_text = INTERVIEW_QUESTIONS[question_index] if 0 <= question_index < len(INTERVIEW_QUESTIONS) else "Intro"
+            # Use a dummy question text for logging if it's dynamic
+            q_text = f"Dynamic Question {question_index}" 
             supabase_logger.log_keyframe(
                 session_id=session_id,
                 timestamp_sec=float(question_index),
@@ -287,71 +349,75 @@ async def offer(request):
         "type": "offer"
     }
     """
-    params = await request.json()
-    offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+async def offer(request):
+    try:
+        params = await request.json()
+        offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
-    pc = RTCPeerConnection()
-    pc_id = "PeerConnection(%s)" % uuid.uuid4()
-    pcs.add(pc)
+        pc = RTCPeerConnection()
+        pc_id = "PeerConnection(%s)" % uuid.uuid4()
+        pcs.add(pc)
 
-    # We will use our custom processors instead of a simple MediaBlackhole
-    from stream_processor import VideoStreamProcessor, AudioStreamProcessor, DataChannelManager
-    
-    dc_manager = DataChannelManager()
-    processors = []
-
-    def log_info(msg, *args):
-        logger.info(pc_id + " " + msg, *args)
-
-    log_info("Created for %s", request.remote)
-
-    @pc.on("datachannel")
-    def on_datachannel(channel):
-        log_info("Data channel %s created", channel.label)
-        dc_manager.channel = channel
+        # We will use our custom processors instead of a simple MediaBlackhole
+        from stream_processor import VideoStreamProcessor, AudioStreamProcessor, DataChannelManager
         
-        @channel.on("message")
-        def on_message(message):
-            if isinstance(message, str) and message.startswith("ping"):
-                channel.send("pong" + message[4:])
+        dc_manager = DataChannelManager()
+        processors = []
 
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        log_info("Connection state is %s", pc.connectionState)
-        if pc.connectionState == "failed":
-            await pc.close()
-            pcs.discard(pc)
+        def log_info(msg, *args):
+            logger.info(pc_id + " " + msg, *args)
 
-    @pc.on("track")
-    def on_track(track):
-        log_info("Track %s received", track.kind)
+        log_info("Created for %s", request.remote)
 
-        # Hook up streams to our backend AI components
-        if track.kind == "video":
-            processor = VideoStreamProcessor(track, dc_manager)
-            processors.append(processor)
-        # AudioStreamProcessor is commented out as requested to favor turn-based logic
-        # elif track.kind == "audio":
-        #    processor = AudioStreamProcessor(track, dc_manager)
-        #    processors.append(processor)
+        @pc.on("datachannel")
+        def on_datachannel(channel):
+            log_info("Data channel %s created", channel.label)
+            dc_manager.channel = channel
+            
+            @channel.on("message")
+            def on_message(message):
+                if isinstance(message, str) and message.startswith("ping"):
+                    channel.send("pong" + message[4:])
 
-        @track.on("ended")
-        async def on_ended():
-            log_info("Track %s ended", track.kind)
+        @pc.on("connectionstatechange")
+        async def on_connectionstatechange():
+            log_info("Connection state is %s", pc.connectionState)
+            if pc.connectionState == "failed":
+                await pc.close()
+                pcs.discard(pc)
 
-    # handle offer
-    await pc.setRemoteDescription(offer)
+        @pc.on("track")
+        def on_track(track):
+            log_info("Track %s received", track.kind)
 
-    # send answer
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
+            # Hook up streams to our backend AI components
+            if track.kind == "video":
+                processor = VideoStreamProcessor(track, dc_manager)
+                processors.append(processor)
+            # AudioStreamProcessor is commented out as requested to favor turn-based logic
+            # elif track.kind == "audio":
+            #    processor = AudioStreamProcessor(track, dc_manager)
+            #    processors.append(processor)
 
-    return web.Response(
-        content_type="application/json",
-        text=json.dumps(
+            @track.on("ended")
+            async def on_ended():
+                log_info("Track %s ended", track.kind)
+
+        # handle offer
+        await pc.setRemoteDescription(offer)
+
+        # send answer
+        answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+
+        return web.json_response(
             {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
-        ),
-    )
+        )
+    except Exception as e:
+        logger.error(f"Offer Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return web.json_response({"error": str(e)}, status=500)
 
 
 async def on_shutdown(app):
@@ -392,6 +458,7 @@ if __name__ == "__main__":
         })
 
         # Prefix all routes with /api/ to handle proxy
+        app.router.add_post("/api/init-session", init_session)
         res_offer = app.router.add_post("/api/offer", offer)
         res_health = app.router.add_get("/api/health", lambda request: web.Response(text="OK"))
         res_heartbeat = app.router.add_get("/api/heartbeat", heartbeat)
