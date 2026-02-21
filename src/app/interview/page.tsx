@@ -100,7 +100,7 @@ function CameraPanel({
   onToggleCamera,
   onToggleMic,
 }: {
-  videoRef: React.RefObject<HTMLVideoElement>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
   cameraOn: boolean;
   micOn: boolean;
   onToggleCamera: () => void;
@@ -174,9 +174,9 @@ function CountdownOverlay({ countdown }: { countdown: number }) {
 function ConnectionBadge({ status }: { status: "connecting" | "connected" | "failed" | "mock" }) {
   const config = {
     connecting: { color: "#febc2e", label: "CONNECTING TO BACKEND" },
-    connected:  { color: "var(--success)", label: "BACKEND CONNECTED" },
-    failed:     { color: "var(--danger)", label: "USING MOCK DATA" },
-    mock:       { color: "var(--muted)", label: "MOCK MODE" },
+    connected: { color: "var(--success)", label: "BACKEND CONNECTED" },
+    failed: { color: "var(--danger)", label: "USING MOCK DATA" },
+    mock: { color: "var(--muted)", label: "MOCK MODE" },
   }[status];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
@@ -199,21 +199,21 @@ export default function InterviewPage() {
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [gazeScore, setGazeScore]           = useState(88);
-  const [confidence, setConfidence]         = useState(82);
-  const [fidget, setFidget]                 = useState(12);
-  const [isSpeaking, setIsSpeaking]         = useState(false);
-  const [isReady, setIsReady]               = useState(false);
-  const [countdown, setCountdown]           = useState<number | null>(null);
-  const [connStatus, setConnStatus]         = useState<"connecting" | "connected" | "failed" | "mock">("connecting");
-  const [cameraOn, setCameraOn]             = useState(false);
-  const [micOn, setMicOn]                   = useState(false);
+  const [gazeScore, setGazeScore] = useState(88);
+  const [confidence, setConfidence] = useState(82);
+  const [fidget, setFidget] = useState(12);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [connStatus, setConnStatus] = useState<"connecting" | "connected" | "failed" | "mock">("connecting");
+  const [cameraOn, setCameraOn] = useState(false);
+  const [micOn, setMicOn] = useState(false);
 
-  const transcriptRef  = useRef<HTMLDivElement>(null);
-  const localVideoRef  = useRef<HTMLVideoElement>(null);
-  const streamRef      = useRef<MediaStream | null>(null);
-  const pcRef          = useRef<RTCPeerConnection | null>(null);
-  const dcRef          = useRef<RTCDataChannel | null>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const dcRef = useRef<RTCDataChannel | null>(null);
   const interviewStartedRef = useRef(false); // guard so startInterview only fires once
 
   // ── Start timer + interview when camera or mic first turns on ─────────────
@@ -450,7 +450,7 @@ export default function InterviewPage() {
       <header style={{ borderBottom: "1px solid var(--border)", padding: "1rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger)" }} className="pulse-ring" />
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger)" }} />
             <span className="label" style={{ color: "var(--danger)" }}>LIVE SESSION</span>
           </div>
           <ConnectionBadge status={connStatus} />
@@ -481,9 +481,9 @@ export default function InterviewPage() {
           </div>
 
           <div className="card" style={{ display: "flex", justifyContent: "space-around", padding: "1.25rem" }}>
-            <ScoreRing label="GAZE"       value={gazeScore}    color="var(--accent)"  />
-            <ScoreRing label="CONFIDENCE" value={confidence}   color="var(--accent2)" />
-            <ScoreRing label="CALM"       value={100 - fidget} color="var(--success)" />
+            <ScoreRing label="GAZE" value={gazeScore} color="var(--accent)" />
+            <ScoreRing label="CONFIDENCE" value={confidence} color="var(--accent2)" />
+            <ScoreRing label="CALM" value={100 - fidget} color="var(--success)" />
           </div>
         </div>
 

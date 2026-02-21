@@ -150,48 +150,47 @@ const TESTIMONIALS = [
   { initial: "L", name: "Leo B.", role: "PhD → Quant at Jane Street", accent: "#00e096", text: "It caught that I avoid eye contact right after technical explanations. That's gold-level feedback you'd only get from a professional coach." },
 ];
 
-// Each card gets: viewport-relative position, rotation, depth, and a unique
-// float animation (name + duration + delay). All movement is CSS-only.
+// rx/ry = horizontal/vertical radius (vw/vh)
+// duration = time for one full orbit
+// delay = start position in the orbit (0 to -duration)
 const CARD_CONFIG = [
-  { x: -38, y: 12, rot: -3, scale: 1, opacity: 1, blur: 0, anim: "floatA", dur: "9s", delay: "0s" },
-  { x: 28, y: 8, rot: 5, scale: 0.88, opacity: 0.7, blur: 0.8, anim: "floatB", dur: "11s", delay: "-3s" },
-  { x: -48, y: 48, rot: -6, scale: 0.94, opacity: 0.88, blur: 0, anim: "floatC", dur: "10s", delay: "-5s" },
-  { x: 38, y: 52, rot: 3, scale: 1, opacity: 1, blur: 0, anim: "floatA", dur: "8s", delay: "-2s" },
-  { x: -6, y: 2, rot: 7, scale: 0.78, opacity: 0.42, blur: 2.2, anim: "floatB", dur: "13s", delay: "-6s" },
-  { x: 16, y: 70, rot: -4, scale: 0.88, opacity: 0.7, blur: 0.8, anim: "floatC", dur: "10s", delay: "-1s" },
-  { x: -26, y: 78, rot: 6, scale: 1, opacity: 1, blur: 0, anim: "floatA", dur: "12s", delay: "-4s" },
-  { x: 48, y: 30, rot: -3, scale: 0.88, opacity: 0.7, blur: 0.8, anim: "floatB", dur: "9s", delay: "-7s" },
+  { rx: 42, ry: 22, dur: "45s", delay: "0s", rot: -4 },
+  { rx: 32, ry: 15, dur: "52s", delay: "-8s", rot: 5 },
+  { rx: 48, ry: 25, dur: "58s", delay: "-20s", rot: -6 },
+  { rx: 36, ry: 18, dur: "50s", delay: "-32s", rot: 3 },
+  { rx: 28, ry: 12, dur: "65s", delay: "-12s", rot: 7 },
+  { rx: 45, ry: 20, dur: "55s", delay: "-40s", rot: -4 },
 ];
 
 function TestimonialsCloud() {
+  // Use a subset of testimonials for the marquee
+  const items = TESTIMONIALS.slice(0, 6);
+
   return (
     <>
       <style>{`
-        @keyframes floatA {
-          0%   { transform: translate(-50%, -50%) translateY(0px)   rotate(var(--rot)); }
-          33%  { transform: translate(-50%, -50%) translateY(-18px) rotate(var(--rot)); }
-          66%  { transform: translate(-50%, -50%) translateY(8px)   rotate(var(--rot)); }
-          100% { transform: translate(-50%, -50%) translateY(0px)   rotate(var(--rot)); }
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
         }
-        @keyframes floatB {
-          0%   { transform: translate(-50%, -50%) translateY(0px)   translateX(0px)   rotate(var(--rot)); }
-          25%  { transform: translate(-50%, -50%) translateY(12px)  translateX(-8px)  rotate(var(--rot)); }
-          50%  { transform: translate(-50%, -50%) translateY(-14px) translateX(6px)   rotate(var(--rot)); }
-          75%  { transform: translate(-50%, -50%) translateY(6px)   translateX(-4px)  rotate(var(--rot)); }
-          100% { transform: translate(-50%, -50%) translateY(0px)   translateX(0px)   rotate(var(--rot)); }
+        .marquee-container {
+          display: flex;
+          width: max-content;
+          animation: marquee 40s linear infinite;
         }
-        @keyframes floatC {
-          0%   { transform: translate(-50%, -50%) translateY(0px)   rotate(var(--rot)); }
-          40%  { transform: translate(-50%, -50%) translateY(16px)  rotate(var(--rot)); }
-          80%  { transform: translate(-50%, -50%) translateY(-10px) rotate(var(--rot)); }
-          100% { transform: translate(-50%, -50%) translateY(0px)   rotate(var(--rot)); }
+        .marquee-container:hover {
+          animation-play-state: paused;
         }
         .testimonial-card-inner {
-          transition: transform 0.25s ease, box-shadow 0.25s ease;
+          transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.3s ease;
           cursor: default;
+          width: 320px;
+          flex-shrink: 0;
+          margin-right: 2.5rem;
         }
         .testimonial-card-inner:hover {
-          transform: scale(1.05) !important;
+          transform: translateY(-8px) scale(1.02) !important;
+          z-index: 10;
         }
       `}</style>
 
@@ -202,88 +201,71 @@ function TestimonialsCloud() {
         background: "var(--surface)",
         borderTop: "1px solid var(--border)",
         borderBottom: "1px solid var(--border)",
-        minHeight: "680px",
+        minHeight: "580px",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
       }}>
 
         <div style={{
           position: "absolute", inset: 0, pointerEvents: "none",
-          background: "radial-gradient(ellipse 75% 60% at 50% 50%, rgba(0,229,255,0.04) 0%, transparent 70%)",
+          background: "radial-gradient(circle at 20% 50%, rgba(0,229,255,0.03) 0%, transparent 50%), radial-gradient(circle at 80% 50%, rgba(123,97,255,0.03) 0%, transparent 50%)",
         }} />
 
         <div style={{
-          position: "relative", zIndex: 20,
+          position: "relative", zIndex: 30,
           textAlign: "center",
-          marginBottom: "3rem",
+          marginBottom: "5rem",
           pointerEvents: "none",
         }}>
           <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "0.6rem" }}>04 — Reviews</div>
-          <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.6rem)", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)" }}>What people are saying</h2>
+          <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.6rem)", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)" }}>Success from the source</h2>
+          <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: "0.75rem", fontFamily: "var(--mono)" }}>Hover to pause the line</p>
         </div>
 
-        <div style={{
-          position: "relative",
-          width: "100%",
-          height: "520px",
-        }}>
-          {TESTIMONIALS.map((t, i) => {
-            const cfg = CARD_CONFIG[i];
-            return (
+        <div style={{ position: "relative", width: "100%", overflow: "hidden" }}>
+          <div className="marquee-container">
+            {[...items, ...items].map((t, i) => (
               <div
                 key={i}
+                className="testimonial-card-inner"
                 style={{
-                  position: "absolute",
-                  left: `calc(50% + ${cfg.x}vw)`,
-                  top: `${cfg.y}%`,
-                  "--rot": `${cfg.rot}deg`,
-                  transform: `translate(-50%, -50%) rotate(${cfg.rot}deg) scale(${cfg.scale})`,
-                  opacity: cfg.opacity,
-                  filter: cfg.blur > 0 ? `blur(${cfg.blur}px)` : "none",
-                  zIndex: cfg.scale === 1 ? 10 : cfg.scale > 0.85 ? 7 : 4,
-                  width: "clamp(210px, 20vw, 285px)",
-                  animation: `${cfg.anim} ${cfg.dur} ease-in-out ${cfg.delay} infinite`,
-                  willChange: "transform",
-                } as React.CSSProperties}
+                  background: "#0b1220",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  borderTop: `2px solid ${t.accent}`,
+                  borderRadius: "16px",
+                  padding: "1.5rem",
+                  boxShadow: `0 8px 32px ${t.accent}08, 0 2px 8px rgba(0,0,0,0.5)`,
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.boxShadow = `0 20px 60px ${t.accent}2a, 0 4px 12 rgba(0,0,0,0.6)`;
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 32px ${t.accent}08, 0 2px 8px rgba(0,0,0,0.5)`;
+                }}
               >
-                <div
-                  className="testimonial-card-inner"
-                  style={{
-                    background: "#0b1220",
-                    border: "1px solid rgba(255,255,255,0.06)",
-                    borderTop: `2px solid ${t.accent}`,
-                    borderRadius: "14px",
-                    padding: "1.1rem 1.25rem",
-                    boxShadow: `0 8px 32px ${t.accent}12, 0 2px 8px rgba(0,0,0,0.5)`,
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLElement).style.boxShadow = `0 20px 50px ${t.accent}2e, 0 2px 8px rgba(0,0,0,0.5)`;
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 32px ${t.accent}12, 0 2px 8px rgba(0,0,0,0.5)`;
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.8rem" }}>
-                    <div style={{
-                      width: "32px", height: "32px", borderRadius: "50%",
-                      background: `${t.accent}18`, border: `1px solid ${t.accent}40`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: t.accent, fontWeight: 700, fontSize: "0.8rem", flexShrink: 0,
-                    }}>
-                      {t.initial}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: "0.78rem", color: "#d4dce8", lineHeight: 1.2 }}>{t.name}</div>
-                      <div style={{ fontSize: "0.6rem", color: "#4a5870", fontFamily: "var(--mono)", marginTop: "1px" }}>{t.role}</div>
-                    </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                  <div style={{
+                    width: "40px", height: "40px", borderRadius: "50%",
+                    background: `${t.accent}12`, border: `1px solid ${t.accent}30`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: t.accent, fontWeight: 700, fontSize: "0.9rem", flexShrink: 0,
+                  }}>
+                    {t.initial}
                   </div>
-                  <p style={{ fontSize: "0.74rem", lineHeight: 1.68, color: "#6a7a8e", fontFamily: "var(--mono)" }}>"{t.text}"</p>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "#d4dce8", lineHeight: 1.2 }}>{t.name}</div>
+                    <div style={{ fontSize: "0.65rem", color: "#4a5870", fontFamily: "var(--mono)", marginTop: "3px" }}>{t.role}</div>
+                  </div>
                 </div>
+                <p style={{ fontSize: "0.82rem", lineHeight: 1.7, color: "#8a9ab0", fontFamily: "var(--mono)" }}>"{t.text}"</p>
               </div>
-            );
-          })}
+            ))}
+          </div>
 
           <div style={{
-            position: "absolute", inset: 0, pointerEvents: "none", zIndex: 15,
-            background: "radial-gradient(ellipse 88% 78% at 50% 50%, transparent 42%, var(--surface) 100%)",
+            position: "absolute", inset: 0, pointerEvents: "none", zIndex: 20,
+            background: "linear-gradient(to right, var(--surface) 0%, transparent 15%, transparent 85%, var(--surface) 100%)",
           }} />
         </div>
       </section>
