@@ -41,7 +41,8 @@ try:
     from stream_processor import (
         get_landmarkers, get_visual_model, whisper_model,
         process_mediapipe_results, device, SEQUENCE_LENGTH, VisualConfidenceModel,
-        VideoStreamProcessor, AudioStreamProcessor, DataChannelManager
+        VideoStreamProcessor, AudioStreamProcessor, DataChannelManager,
+        SpeechAnalyzer
     )
     from anaylisis.engine import InterviewAnalyzerEngine
     
@@ -192,6 +193,11 @@ async def stream_process(request):
                     finally:
                         if os.path.exists(t_video): os.remove(t_video)
 
+                # Speech Analysis (Fillers & Tone)
+                speech_results = SpeechAnalyzer.analyze(transcribed_text)
+                filler_count = speech_results["filler_count"]
+                sentiment_score = speech_results["sentiment"]
+
                 # Log to Supabase (Unified record)
                 supabase_logger.log_keyframe(
                     session_id=s_id,
@@ -205,6 +211,8 @@ async def stream_process(request):
                     fidget_index=float(v_fidget),
                     is_visually_confident=v_conf >= 0.5,
                     overall_confidence_score=float(confidence_score),
+                    filler_words_count=filler_count,
+                    sentiment_score=sentiment_score,
                     keyframe_reason="Background Analysis"
                 )
             except Exception as e:
@@ -331,6 +339,8 @@ async def chat(request):
             async def run_analysis():
                 try:
                     report = await analyzer_engine.generate_report(session_id, "Standard Technical Interviewer")
+                    # Save the report markdown to Supabase
+                    supabase_logger.save_report(session_id, report)
                     print(f"\n--- INTERVIEW ANALYSIS REPORT ({session_id}) ---\n{report}\n")
                 except Exception as ex:
                     print(f"Analysis Error: {ex}")
@@ -426,6 +436,30 @@ async def offer(request):
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def get_report_handler(request):
+    session_id = request.match_info.get('session_id')
+    if not session_id:
+        return web.json_response({"error": "No session_id provided"}, status=400)
+    
+    report_data = supabase_logger.get_report(session_id)
+    if not report_data:
+        return web.json_response({"error": "Report not found or not yet generated"}, status=404)
+    
+    return web.json_response(report_data)
+
+async def get_session_data_handler(request):
+    session_id = request.match_info.get('session_id')
+    if not session_id:
+        return web.json_response({"error": "No session_id provided"}, status=400)
+    
+    report = supabase_logger.get_report(session_id)
+    keyframes = supabase_logger.get_keyframes(session_id)
+    
+    return web.json_response({
+        "report": report,
+        "keyframes": keyframes
+    })
+
 async def on_shutdown(app):
     # close peer connections
     coros = [pc.close() for pc in pcs]
@@ -471,6 +505,8 @@ if __name__ == "__main__":
         res_stream = app.router.add_post("/api/stream-process", stream_process)
         res_chat = app.router.add_post("/api/chat", chat)
         res_tts = app.router.add_post("/api/tts", tts)
+        app.router.add_get("/api/report/{session_id}", get_report_handler)
+        app.router.add_get("/api/session/{session_id}/data", get_session_data_handler)
 
         # Add CORS to all routes
         for route in list(app.router.routes()):

@@ -1,13 +1,15 @@
 "use client";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, useClerk } from "@clerk/nextjs";
+import Link from "next/link";
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer, Area
 } from "recharts";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import { MOCK_BIOMETRICS, MOCK_TRANSCRIPT, MOCK_SESSION } from "@/lib/mockData";
+import ReactMarkdown from "react-markdown";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 export interface BiometricDataPoint {
@@ -15,6 +17,8 @@ export interface BiometricDataPoint {
   gazeScore: number;   // 0–100
   confidence: number;  // 0–100
   fidgetIndex: number; // 0–100 (lower = calmer)
+  fillerCount?: number;
+  tone?: number;
   stressSpike?: boolean;
 }
 
@@ -34,7 +38,6 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-// ─── COMPONENT ────────────────────────────────────────────────────────────────
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
@@ -173,15 +176,121 @@ function InternalBiometricChart({ data, activeTimestamp, onChartClick }: Biometr
   );
 }
 
-// ─── MAIN REPORT PAGE ────────────────────────────────────────────────────────
-import { useMemo } from "react";
-import Link from "next/link";
+// ─── SPEECH CHART COMPONENT ──────────────────────────────────────────────────
+function InternalSpeechChart({ data, activeTimestamp, onChartClick }: BiometricChartProps) {
+  const handleClick = (chartData: any) => {
+    if (chartData?.activePayload?.[0] && onChartClick) {
+      onChartClick(chartData.activePayload[0].payload.time);
+    }
+  };
 
+  return (
+    <div className="card" style={{ marginBottom: "2rem", padding: "1.5rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+        <div>
+          <h2 style={{ fontSize: "1.1rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.4rem" }}>Speech & Tone Evolution</h2>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--muted)" }}>
+            Tracking filler words (bars) and performance tone (line)
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: "1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <div style={{ width: "8px", height: "8px", background: "var(--accent)" }} />
+            <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)", color: "var(--muted)" }}>FILLERS</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+            <div style={{ width: "8px", height: "2px", background: "var(--accent2)" }} />
+            <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)", color: "var(--muted)" }}>TONE (0-100)</span>
+          </div>
+        </div>
+      </div>
+
+      <ResponsiveContainer width="100%" height={280}>
+        <ComposedChart data={data} onClick={handleClick} style={{ cursor: "pointer" }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+          <XAxis
+            dataKey="time"
+            tickFormatter={(v) => `${v}s`}
+            tick={{ fill: "var(--muted)", fontSize: 10, fontFamily: "var(--font-mono)" }}
+            axisLine={false} tickLine={false}
+          />
+          <YAxis
+            tick={{ fill: "var(--muted)", fontSize: 10, fontFamily: "var(--font-mono)" }}
+            axisLine={false} tickLine={false}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Area type="step" dataKey="fillerCount" fill="var(--accent)" fillOpacity={0.2} stroke="var(--accent)" strokeWidth={1} name="Fillers" />
+          <Line type="monotone" dataKey={(d) => (d.tone || 0.5) * 100} name="Tone" stroke="var(--accent2)" strokeWidth={2} dot={false} />
+
+          {activeTimestamp != null && (
+            <ReferenceLine x={activeTimestamp} stroke="var(--text)" strokeWidth={1} strokeDasharray="3 3" />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ─── MAIN REPORT PAGE ────────────────────────────────────────────────────────
 export default function ReportPage() {
   const router = useRouter();
-  const { biometrics = [], transcript = [], sessionId, reset } = useInterviewStore();
+  const { biometrics = [], transcript = [], sessionId, aiCoachingReport, setAiCoachingReport, setBiometrics, setTranscript, reset } = useInterviewStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [activeTimestamp, setActiveTimestamp] = useState<number | null>(null);
+  const [isFetchingReport, setIsFetchingReport] = useState(false);
+
+  // Fetch real session data if sessionId is present
+  useEffect(() => {
+    if (sessionId && !aiCoachingReport && !isFetchingReport) {
+      setIsFetchingReport(true);
+      fetch(`/api/session/${sessionId}/data`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.report?.report_markdown) {
+            setAiCoachingReport(data.report.report_markdown);
+          }
+          if (data.keyframes && data.keyframes.length > 0) {
+            const mappedBiometrics: any[] = [];
+            const mappedTranscript: any[] = [];
+
+            data.keyframes.forEach((kf: any) => {
+              // Map Biometrics (only if metrics are present)
+              if (kf.overall_confidence_score !== null || kf.gaze_score !== null) {
+                mappedBiometrics.push({
+                  time: kf.timestamp_sec,
+                  gazeScore: Math.round((kf.gaze_score ?? 0.8) * 100),
+                  confidence: Math.round((kf.overall_confidence_score ?? 0.5) * 100),
+                  fidgetIndex: Math.round((kf.fidget_index ?? 0.1) * 100),
+                  fillerCount: kf.filler_words_count ?? 0,
+                  tone: kf.sentiment_score ?? 0.5,
+                  stressSpike: kf.severity === "critical"
+                });
+              }
+
+              // Map Transcript items
+              if (kf.interviewer_question) {
+                mappedTranscript.push({ time: kf.timestamp_sec, speaker: "interviewer", text: kf.interviewer_question });
+              }
+              if (kf.associated_transcript) {
+                mappedTranscript.push({ time: kf.timestamp_sec, speaker: "user", text: kf.associated_transcript });
+              }
+              if (kf.ai_response) {
+                mappedTranscript.push({ time: kf.timestamp_sec + 0.5, speaker: "interviewer", text: kf.ai_response });
+              }
+            });
+
+            // Sort by time
+            mappedBiometrics.sort((a, b) => a.time - b.time);
+            mappedTranscript.sort((a, b) => a.time - b.time);
+
+            setBiometrics(mappedBiometrics);
+            setTranscript(mappedTranscript);
+          }
+        })
+        .catch(err => console.error("Failed to fetch session data", err))
+        .finally(() => setIsFetchingReport(false));
+    }
+  }, [sessionId, aiCoachingReport, setAiCoachingReport, setBiometrics, setTranscript, isFetchingReport]);
 
   // Use real store data if available, fall back to mock
   const data = (biometrics && biometrics.length > 0) ? biometrics : MOCK_BIOMETRICS;
@@ -264,43 +373,53 @@ export default function ReportPage() {
           <StatCard label="STRESS SPIKES" value={`${spikeCount}`} sub="moments flagged" color="var(--danger)" />
         </div>
 
-        {/* ── BIOMETRIC CHART ── */}
-        <InternalBiometricChart data={safeData} activeTimestamp={activeTimestamp} onChartClick={jumpToTime} />
+        {/* ── PERFORMANCE CHARTS ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem", marginBottom: "2rem" }}>
+          <InternalBiometricChart data={safeData} activeTimestamp={activeTimestamp} onChartClick={jumpToTime} />
+          <InternalSpeechChart data={safeData} activeTimestamp={activeTimestamp} onChartClick={jumpToTime} />
+        </div>
 
-        {/* ── VIDEO + TRANSCRIPT ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
+        {/* ── AI COACHING REPORT ── */}
+        <div className="card" style={{ padding: "2.5rem", marginBottom: "3rem" }}>
+          <div className="label" style={{ marginBottom: "1.5rem" }}>FULL AI COACHING REPORT</div>
+          <div style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "rgba(232,237,245,0.8)" }} className="markdown-report">
+            {aiCoachingReport ? (
+              <ReactMarkdown>{aiCoachingReport}</ReactMarkdown>
+            ) : isFetchingReport ? (
+              <div style={{ padding: "2rem", textAlign: "center", color: "var(--muted)" }}>
+                <div className="pulse-ring" style={{ width: "20px", height: "20px", margin: "0 auto 1rem" }} />
+                FINALIZING DEEP ANALYSIS...
+              </div>
+            ) : (
+              <div style={{ color: "var(--muted)" }}>No detailed report available yet. This may be a demo session.</div>
+            )}
+          </div>
+        </div>
+
+        {/* ── TRANSCRIPT & QUICK INSIGHTS ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "3rem" }}>
           <div className="card" style={{ padding: "1.5rem" }}>
             <div className="label" style={{ marginBottom: "1.25rem" }}>SESSION TRANSCRIPT</div>
             <div style={{ maxHeight: "500px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
               {txData.map((entry, i) => {
                 const entryStress = [...spikeTimestamps].some(t => Math.abs(t - entry.time) < 8);
-                return (
-                  <TranscriptRow
-                    key={i}
-                    entry={entry}
-                    isStressZone={entryStress}
-                    onJump={jumpToTime}
-                  />
-                );
+                return <TranscriptRow key={i} entry={entry} isStressZone={entryStress} onJump={jumpToTime} />;
               })}
             </div>
           </div>
 
           <div className="card" style={{ padding: "1.5rem" }}>
-            <div className="label" style={{ marginBottom: "1.25rem" }}>AI COACHING INSIGHTS</div>
+            <div className="label" style={{ marginBottom: "1.25rem" }}>QUICK IMPROVEMENTS</div>
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
               {[
-                { icon: "/eye.png", title: "Eye Contact", body: `You maintained strong gaze (${avgGaze}% avg) but dropped significantly at key technical explanations. Practice looking up when thinking.`, tone: "var(--accent)" },
-                { icon: "/microphone.png", title: "Voice Confidence", body: `Your confidence score dipped during the behavioral section. Slow down your speaking pace — rushing signals anxiety more than pausing does.`, tone: "var(--accent2)" },
-                { icon: "/palm.png", title: "Body Language", body: `${spikeCount} stress spikes detected. Try anchoring your hands on the desk to reduce visible fidgeting.`, tone: "var(--danger)" },
-                { icon: "/muscle.png", title: "Strengths", body: `Strong recovery — after each stress spike your scores returned to baseline within 10 seconds. Excellent technical delivery.`, tone: "var(--success)" },
+                { title: "Eye Contact", body: "Focus on the camera particularly during technical explanations.", tone: "var(--accent)" },
+                { title: "Pacing", body: "Your speaking rate increases under pressure. Pause intentionally.", tone: "var(--accent2)" },
+                { title: "Fillers", body: "High density of 'like' and 'um' detected in the session.", tone: "var(--danger)" },
+                { title: "Body Language", body: "Good posture maintained. Try to reduce fidgeting with hands.", tone: "var(--success)" },
               ].map((item) => (
                 <div key={item.title} style={{ padding: "1rem", background: "rgba(255,255,255,0.02)", borderRadius: "10px", borderLeft: `2px solid ${item.tone}` }}>
-                  <div style={{ marginBottom: "0.4rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <CoachingIcon src={item.icon} alt={item.title} color={item.tone} />
-                    <span style={{ color: item.tone, fontSize: "0.85rem" }}>{item.title}</span>
-                  </div>
-                  <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "rgba(232,237,245,0.7)", fontFamily: "var(--font-mono)" }}>{item.body}</p>
+                  <div style={{ marginBottom: "0.4rem", fontWeight: 700, color: item.tone, fontSize: "0.85rem" }}>{item.title}</div>
+                  <p style={{ fontSize: "0.8rem", color: "rgba(232,237,245,0.7)", lineHeight: 1.6 }}>{item.body}</p>
                 </div>
               ))}
             </div>
@@ -308,7 +427,7 @@ export default function ReportPage() {
         </div>
 
         {/* ── FOOTER ACTIONS ── */}
-        <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: "1rem", justifyContent: "center", borderTop: "1px solid var(--border)", paddingTop: "2.5rem" }}>
           <button className="btn-primary" onClick={handleReset}>↺ New Interview</button>
           <button className="btn-ghost" onClick={handleExport}>Export Report</button>
         </div>

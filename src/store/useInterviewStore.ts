@@ -12,6 +12,8 @@ export interface BiometricPoint {
   gazeScore: number;
   confidence: number;
   fidgetIndex: number;
+  fillerCount?: number;
+  tone?: number;
   stressSpike?: boolean;
 }
 
@@ -30,6 +32,7 @@ interface InterviewStore {
   transcript: TranscriptEntry[];
   liveAlert: string | null;
   interviewStartTime: number | null;
+  aiCoachingReport: string | null;
 
   setPhase: (phase: InterviewPhase) => void;
   setSessionId: (id: string) => void;
@@ -41,6 +44,9 @@ interface InterviewStore {
   setLiveAlert: (alert: string | null) => void;
   startInterview: () => void;
   finishInterview: () => void;
+  setAiCoachingReport: (report: string | null) => void;
+  setBiometrics: (biometrics: BiometricPoint[]) => void;
+  setTranscript: (transcript: TranscriptEntry[]) => void;
   reset: () => void;
 }
 
@@ -53,6 +59,7 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
   transcript: [],
   liveAlert: null,
   interviewStartTime: null,
+  aiCoachingReport: null,
 
   setPhase: (phase) => set({ phase }),
   setSessionId: (id) => set({ sessionId: id }),
@@ -75,6 +82,9 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
   startInterview: () =>
     set({ phase: "live", interviewStartTime: Date.now() }),
   finishInterview: () => set({ phase: "processing" }),
+  setAiCoachingReport: (report) => set({ aiCoachingReport: report }),
+  setBiometrics: (biometrics) => set({ biometrics }),
+  setTranscript: (transcript) => set({ transcript }),
   reset: () =>
     set({
       phase: "upload",
@@ -85,5 +95,6 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
       transcript: [],
       liveAlert: null,
       interviewStartTime: null,
+      aiCoachingReport: null,
     }),
 }));
