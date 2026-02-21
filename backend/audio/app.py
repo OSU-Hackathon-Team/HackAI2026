@@ -8,6 +8,14 @@ import librosa
 import soundfile as sf
 import requests
 
+import sys
+import os
+
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
+from supabase_client import supabase_logger
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -208,6 +216,10 @@ def stream_process():
         pacing_wpm = (word_count / duration) * 60 if duration > 0 else 0
         pacing_score = min(1.0, pacing_wpm / 200.0)
         
+        # Extract session info
+        session_id = request.form.get('session_id')
+        timestamp_sec = float(request.form.get('timestamp_sec', 0.0))
+        
         # Combined Confidence: Weighted mix of pitch stability and volume
         pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
         median_mag = np.median(magnitudes)
@@ -219,6 +231,20 @@ def stream_process():
         energy_score = min(1.0, mean_rms * 20.0)
         
         confidence_score = (pitch_score * 0.4) + (energy_score * 0.6)
+        
+        # Log to Supabase
+        if session_id:
+            supabase_logger.log_keyframe(
+                session_id=session_id,
+                timestamp_sec=timestamp_sec,
+                volume_rms=float(mean_rms),
+                pitch_stdev=float(pitch_stdev),
+                pacing_wpm=float(pacing_wpm),
+                is_audibly_confident=bool(confidence_score >= 0.5),
+                overall_confidence_score=float(confidence_score),
+                keyframe_reason="Audio processed successfully",
+                associated_transcript=text
+            )
         
         return jsonify({
             "text": text,

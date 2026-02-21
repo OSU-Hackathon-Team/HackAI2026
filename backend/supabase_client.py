@@ -23,24 +23,22 @@ class SupabaseLogger:
                 logger.error(f"Failed to initialize Supabase client: {e}")
                 self.supabase = None
 
-    def log_metrics(self, session_id: str, timestamp: float, gaze_score: float, fidget_index: float, confident: bool):
+    def log_keyframe(self, session_id: str, timestamp_sec: float, **kwargs):
         """
-        Asynchronously log video metrics to Supabase.
+        Asynchronously log keyframes to Supabase.
         """
         if not self.supabase:
             return
 
+        payload = {
+            "session_id": session_id,
+            "timestamp_sec": timestamp_sec,
+        }
+        payload.update(kwargs)
+
         try:
-            data, count = self.supabase.table("interview_metrics").insert({
-                "session_id": session_id,
-                "timestamp_sec": timestamp,
-                "gaze_score": gaze_score,
-                "fidget_index": fidget_index,
-                "is_confident": confident
-            }).execute()
-            # In a truly high-throughput system you might want to batch these or use async supabase,
-            # but this provides the "fire-and-forget" functionality described in masterDoc.md.
+            self.supabase.table("interview_keyframes").insert(payload).execute()
         except Exception as e:
-            logger.error(f"Failed to flush metrics to Supabase: {e}")
+            logger.error(f"Failed to flush keyframe to Supabase: {e}")
 
 supabase_logger = SupabaseLogger()
