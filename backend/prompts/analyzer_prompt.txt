@@ -39,7 +39,8 @@ Highlight any positive actions or stabilizing factors
 **WHAT YOU SHOULD HAVE DONE:**
 Provide actionable advice on how to improve this specific moment, both technically/verbally and physically/vocally
 
-**TIMESTAMP:** [Next MM:SS]
-**WHAT YOU DID:** ...
+**TIMESTAMP:**
+[Next MM:SS]
+**WHAT YOU DID:**
 ...
 ```
