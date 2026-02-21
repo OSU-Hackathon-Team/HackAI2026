@@ -64,7 +64,6 @@ function CountdownOverlay({ countdown }: { countdown: number }) {
       gap: "1.5rem",
       transition: "opacity 0.4s ease",
     }}>
-      {/* Ambient glow behind the content */}
       <div style={{
         position: "absolute",
         width: "400px", height: "400px",
@@ -76,9 +75,9 @@ function CountdownOverlay({ countdown }: { countdown: number }) {
         pointerEvents: "none",
       }} />
 
-      {/* Main countdown number or checkmark */}
+      {/* Main countdown number or good luck text */}
       <div style={{
-        fontSize: isGoodLuck ? "4rem" : "6rem",
+        fontSize: isGoodLuck ? "4.5rem" : "6rem",
         fontWeight: 800,
         fontFamily: "var(--font-mono)",
         color: isGoodLuck ? "var(--success)" : "var(--accent)",
@@ -88,27 +87,24 @@ function CountdownOverlay({ countdown }: { countdown: number }) {
           ? "0 0 60px rgba(0,224,150,0.5)"
           : "0 0 60px rgba(0,229,255,0.4)",
         animation: "countPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
-        key: countdown,
       }}>
-        {isGoodLuck ? "✓" : countdown}
+        {isGoodLuck ? "Good luck!" : countdown}
       </div>
 
-      {/* Message */}
-      <div style={{
-        textAlign: "center",
-        display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem",
-      }}>
+      {/* Subtitle when counting */}
+      {!isGoodLuck && (
         <div style={{
-          fontSize: isGoodLuck ? "1.6rem" : "1.1rem",
-          fontWeight: 700,
-          color: isGoodLuck ? "var(--success)" : "var(--text)",
-          letterSpacing: "-0.02em",
-          transition: "all 0.4s ease",
-          textShadow: isGoodLuck ? "0 0 40px rgba(0,224,150,0.4)" : "none",
+          textAlign: "center",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem",
         }}>
-          {isGoodLuck ? "Good luck!" : "Interview starting in"}
-        </div>
-        {!isGoodLuck && (
+          <div style={{
+            fontSize: "1.1rem",
+            fontWeight: 700,
+            color: "var(--text)",
+            letterSpacing: "-0.02em",
+          }}>
+            Interview starting in
+          </div>
           <div style={{
             fontFamily: "var(--font-mono)",
             fontSize: "0.78rem",
@@ -117,8 +113,8 @@ function CountdownOverlay({ countdown }: { countdown: number }) {
           }}>
             Get comfortable and look at the camera
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Progress bar */}
       {!isGoodLuck && (
@@ -166,27 +162,19 @@ export default function InterviewPage() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-  // Countdown state: null = no overlay, 10..1 = counting, 0 = "Good luck!"
   const [countdown, setCountdown] = useState<number | null>(null);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
 
-  // ── Connecting phase → start countdown ──
   useEffect(() => {
     if (phase !== "connecting") return;
-
-    // Show the overlay immediately with 10
     setCountdown(10);
-
-    // Tick down every second
     let current = 10;
     const ticker = setInterval(() => {
       current -= 1;
       setCountdown(current);
-
       if (current <= 0) {
         clearInterval(ticker);
-        // Show "Good luck!" for 1.5s then dismiss
         setTimeout(() => {
           setCountdown(null);
           startInterview();
@@ -195,7 +183,6 @@ export default function InterviewPage() {
         }, 1500);
       }
     }, 1000);
-
     return () => clearInterval(ticker);
   }, [phase]);
 
@@ -203,21 +190,18 @@ export default function InterviewPage() {
     if (phase === "live") setIsReady(true);
   }, [phase]);
 
-  // ── Timer ──
   useEffect(() => {
     if (!isReady) return;
     const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
     return () => clearInterval(interval);
   }, [isReady]);
 
-  // ── Auto-scroll transcript ──
   useEffect(() => {
     if (transcriptRef.current) {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
     }
   }, [transcript]);
 
-  // ── Mock data streaming ──
   const startMockStreams = () => {
     MOCK_BIOMETRICS.forEach((point) => {
       setTimeout(() => {
@@ -227,7 +211,6 @@ export default function InterviewPage() {
         addBiometricPoint(point);
       }, point.time * 1000);
     });
-
     MOCK_TRANSCRIPT.forEach((entry) => {
       setTimeout(() => {
         setIsSpeaking(entry.speaker === "interviewer");
@@ -237,7 +220,6 @@ export default function InterviewPage() {
         }
       }, entry.time * 1000);
     });
-
     MOCK_LIVE_ALERTS.forEach(({ delay, message }) => {
       setTimeout(() => {
         setLiveAlert(message);
@@ -260,7 +242,6 @@ export default function InterviewPage() {
     return `${m}:${sec}`;
   };
 
-  // ── Processing screen ──
   if (phase === "processing") {
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.5rem" }}>
@@ -274,10 +255,8 @@ export default function InterviewPage() {
   return (
     <div style={{ minHeight: "100vh", display: "grid", gridTemplateRows: "auto 1fr auto", background: "var(--bg)" }}>
 
-      {/* ── COUNTDOWN OVERLAY ── */}
       {countdown !== null && <CountdownOverlay countdown={countdown} />}
 
-      {/* ── TOP BAR ── */}
       <header style={{ borderBottom: "1px solid var(--border)", padding: "1rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger)", position: "relative" }} className="pulse-ring" />
@@ -291,9 +270,7 @@ export default function InterviewPage() {
         </button>
       </header>
 
-      {/* ── MAIN CONTENT ── */}
       <main style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "1.5rem", padding: "1.5rem 2rem", overflow: "hidden" }}>
-
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           <AvatarPlaceholder isSpeaking={isSpeaking} />
           <div className="card" style={{ display: "flex", justifyContent: "space-around", padding: "1.25rem" }}>
@@ -338,7 +315,6 @@ export default function InterviewPage() {
         </div>
       </main>
 
-      {/* ── USER VIDEO STRIP ── */}
       <footer style={{ borderTop: "1px solid var(--border)", padding: "0.75rem 2rem", display: "flex", alignItems: "center", gap: "1rem" }}>
         <div style={{ width: "80px", height: "56px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span style={{ fontSize: "1.25rem" }}>📹</span>
