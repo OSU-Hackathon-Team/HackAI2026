@@ -12,56 +12,164 @@ export default function TestAudioPage() {
     const [questionIndex, setQuestionIndex] = useState(0);
     const [keyframes, setKeyframes] = useState<any[]>([]);
     const [currentResponse, setCurrentResponse] = useState<any>(null);
+    const [mediaError, setMediaError] = useState<string | null>(null);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const videoRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+    const videoChunksRef = useRef<Blob[]>([]);
+    const videoPreviewRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
         // Generate a random fake session ID on mount
         setSessionId(Math.random().toString(36).substring(2, 15));
     }, []);
 
-    const startRecording = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-            mediaRecorderRef.current = mediaRecorder;
-            audioChunksRef.current = [];
+    const getSupportedMimeType = (type: 'audio' | 'video') => {
+        const types = type === 'audio'
+            ? ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/wav']
+            : ['video/webm', 'video/mp4', 'video/ogg'];
+        for (const t of types) {
+            if (MediaRecorder.isTypeSupported(t)) return t;
+        }
+        return '';
+    };
 
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    audioChunksRef.current.push(event.data);
+    const startRecording = async () => {
+        setMediaError(null);
+        try {
+            let stream: MediaStream;
+
+            // 1. Try to get Audio first (most critical)
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (err: any) {
+                const msg = `Microphone access failed: ${err.name} - ${err.message}`;
+                setMediaError(msg);
+                console.error(msg);
+                return;
+            }
+
+            // 2. Try to add Video track if possible
+            try {
+                const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const videoTrack = videoStream.getVideoTracks()[0];
+                // Use a fresh stream object to avoid legacy track issues
+                stream = new MediaStream([...stream.getTracks(), videoTrack]);
+            } catch (videoErr: any) {
+                console.warn("Camera access failed, continuing with audio only:", videoErr.name);
+            }
+
+            if (videoPreviewRef.current) {
+                videoPreviewRef.current.srcObject = stream;
+            }
+
+            // 3. Setup Audio Recorder
+            const audioMime = getSupportedMimeType('audio');
+            let audioRecorder: MediaRecorder | null = null;
+
+            const tryStartAudio = (mime: string | null) => {
+                try {
+                    const options = mime ? { mimeType: mime } : undefined;
+                    const recorder = new MediaRecorder(stream, options);
+                    recorder.start();
+                    return recorder;
+                } catch (e) {
+                    console.error(`Failed to start audio with ${mime}:`, e);
+                    return null;
                 }
             };
 
-            mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                await processAudio(audioBlob);
+            audioRecorder = tryStartAudio(audioMime);
+            if (!audioRecorder) {
+                console.warn("Retrying Audio Recorder with no mimeType");
+                audioRecorder = tryStartAudio(null);
+            }
+
+            if (!audioRecorder) {
+                setMediaError("Could not start any MediaRecorder for audio. Your browser may not support recording.");
+                return;
+            }
+
+            mediaRecorderRef.current = audioRecorder;
+            audioChunksRef.current = [];
+            audioRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+
+            // 4. Setup Video Recorder (if track exists)
+            const videoTracks = stream.getVideoTracks();
+            if (videoTracks.length > 0) {
+                const videoMime = getSupportedMimeType('video');
+                let videoRecorder: MediaRecorder | null = null;
+
+                const tryStartVideo = (mime: string | null) => {
+                    try {
+                        const options = mime ? { mimeType: mime } : undefined;
+                        const recorder = new MediaRecorder(stream, options);
+                        recorder.start();
+                        return recorder;
+                    } catch (e) {
+                        console.error(`Failed to start video with ${mime}:`, e);
+                        return null;
+                    }
+                };
+
+                videoRecorder = tryStartVideo(videoMime);
+                if (!videoRecorder) {
+                    console.warn("Retrying Video Recorder with no mimeType");
+                    videoRecorder = tryStartVideo(null);
+                }
+
+                if (videoRecorder) {
+                    videoRecorderRef.current = videoRecorder;
+                    videoChunksRef.current = [];
+                    videoRecorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunksRef.current.push(e.data); };
+                } else {
+                    videoRecorderRef.current = null;
+                }
+            } else {
+                videoRecorderRef.current = null;
+                videoChunksRef.current = [];
+            }
+
+            audioRecorder.onstop = async () => {
+                const currentAudioMime = audioRecorder?.mimeType || 'audio/webm';
+                const currentVideoRecorder = videoRecorderRef.current;
+
+                setTimeout(async () => {
+                    const audioBlob = new Blob(audioChunksRef.current, { type: currentAudioMime });
+                    const videoBlob = videoChunksRef.current.length > 0
+                        ? new Blob(videoChunksRef.current, { type: currentVideoRecorder?.mimeType || 'video/webm' })
+                        : null;
+                    await processAudio(audioBlob, videoBlob);
+                }, 100);
             };
 
-            mediaRecorder.start();
             setIsRecording(true);
             setCurrentResponse(null);
-        } catch (err) {
-            console.error('Error accessing microphone:', err);
-            alert('Error accessing microphone. Please check permissions.');
+        } catch (err: any) {
+            setMediaError(`Recording setup failed: ${err.name} - ${err.message}`);
+            console.error('Recording setup error:', err);
         }
     };
 
     const stopRecording = () => {
         if (mediaRecorderRef.current && isRecording) {
             mediaRecorderRef.current.stop();
+            if (videoRecorderRef.current) videoRecorderRef.current.stop();
             setIsRecording(false);
             mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
         }
     };
 
-    const processAudio = async (audioBlob: Blob) => {
+    const processAudio = async (audioBlob: Blob, videoBlob: Blob | null) => {
         setIsProcessing(true);
         const formData = new FormData();
         formData.append('audio', audioBlob, 'recording.webm');
+        if (videoBlob) {
+            formData.append('video', videoBlob, 'video.webm');
+        }
         formData.append('session_id', sessionId);
-        formData.append('timestamp_sec', questionIndex.toString()); // Using Q-index as a proxy for time in this simple test
+        formData.append('timestamp_sec', questionIndex.toString());
 
         try {
             // 1. Send to stream-process to get transcript + metrics
@@ -88,7 +196,12 @@ export default function TestAudioPage() {
                 const chatRes = await fetch('http://127.0.0.1:5000/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: streamData.text, question_index: questionIndex, session_id: sessionId }),
+                    body: JSON.stringify({
+                        text: streamData.text,
+                        question_index: questionIndex,
+                        session_id: sessionId,
+                        metrics: streamData.metrics
+                    }),
                 });
                 const chatData = await chatRes.json();
 
@@ -139,25 +252,53 @@ export default function TestAudioPage() {
                 </div>
 
                 {/* Recording Controls */}
-                <div className="bg-gray-900 border border-gray-800 p-8 rounded-xl shadow-lg flex flex-col items-center justify-center space-y-6">
-                    <button
-                        onClick={isRecording ? stopRecording : startRecording}
-                        className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl ${isRecording
-                            ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 ring-4 ring-red-500/50 animate-pulse'
-                            : 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 hover:scale-105 ring-4 ring-emerald-500/50'
-                            }`}
-                    >
-                        {isRecording ? <Square size={48} className="fill-current" /> : <Mic size={48} />}
-                    </button>
-
-                    <div className="text-sm font-medium text-gray-400 flex items-center gap-2">
-                        {isProcessing ? (
-                            <><Loader2 className="animate-spin w-4 h-4" /> Analyzing Biometrics & AI Response...</>
-                        ) : isRecording ? (
-                            <><Activity className="animate-pulse w-4 h-4 text-red-500" /> Listening to Answer for Question {questionIndex + 1}...</>
-                        ) : (
-                            'Click microphone to start answering'
+                <div className="flex flex-col md:flex-row items-center gap-8 w-full max-w-2xl">
+                    <div className="w-64 h-48 bg-black rounded-lg overflow-hidden border border-gray-800 shadow-inner relative">
+                        <video
+                            ref={videoPreviewRef}
+                            autoPlay
+                            muted
+                            playsInline
+                            className="w-full h-full object-cover mirror"
+                        />
+                        {!isRecording && !isProcessing && (
+                            <div className="absolute inset-0 flex items-center justify-center text-gray-700 text-xs">
+                                Camera Preview
+                            </div>
                         )}
+                    </div>
+
+                    <div className="flex flex-col items-center gap-4 flex-1">
+                        <button
+                            onClick={isRecording ? stopRecording : startRecording}
+                            className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl ${isRecording
+                                ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 ring-4 ring-red-500/50 animate-pulse'
+                                : 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 hover:scale-105 ring-4 ring-emerald-500/50'
+                                }`}
+                        >
+                            {isRecording ? <Square size={32} className="fill-current" /> : <Mic size={32} />}
+                        </button>
+
+                        <div className="text-sm font-medium text-gray-400 flex flex-col items-center gap-1 text-center">
+                            {mediaError ? (
+                                <div className="text-red-400 bg-red-400/10 p-3 rounded-lg border border-red-500/20 max-w-sm">
+                                    <p className="font-bold mb-1">Media Error</p>
+                                    <p className="text-xs">{mediaError}</p>
+                                    <button
+                                        onClick={() => setMediaError(null)}
+                                        className="mt-2 text-xs underline hover:text-red-300"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                            ) : isProcessing ? (
+                                <><Loader2 className="animate-spin w-4 h-4" /> Analyzing Audio & Video...</>
+                            ) : isRecording ? (
+                                <><Activity className="animate-pulse w-4 h-4 text-red-500" /> Recording Multimodal Data...</>
+                            ) : (
+                                'Start Multimodal Session'
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -197,7 +338,11 @@ export default function TestAudioPage() {
                                 </div>
                             </div>
 
-                            <div className="pt-4 border-t border-gray-800">
+                            <div className="pt-4 border-t border-gray-800 space-y-4">
+                                <div className="flex justify-between text-xs text-gray-400">
+                                    <span>Gaze: {Math.round((currentResponse.metrics.v_gaze || 0.8) * 100)}%</span>
+                                    <span>Fidget: {Math.round((currentResponse.metrics.v_fidget || 0.1) * 100)}%</span>
+                                </div>
                                 <p className="text-sm text-gray-300 italic">"{currentResponse.transcript}"</p>
                             </div>
                         </div>
