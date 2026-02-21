@@ -154,18 +154,18 @@ def score():
     try:
         audio_file.save(temp_filepath)
         
-        y, sr = librosa.load(temp_filepath, sr=None)
+        y, sr = sf.read(temp_filepath)
+        if len(y.shape) > 1:
+            y = y.mean(axis=1) # downmix to mono if needed
+            
+        # Optimization: Skip STFT/piptrack. Use Zero-Crossing Rate to measure "pitch stability/variance".
+        zcr = librosa.feature.zero_crossing_rate(y)
+        active_zcr = zcr[zcr > np.median(zcr)]
         
-        # Pitch Stability
-        pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
-        # standard deviation of frequencies where magnitude > median
-        median_mag = np.median(magnitudes)
-        active_pitches = pitches[magnitudes > median_mag]
-        
-        if len(active_pitches) > 0:
-            pitch_stdev = np.std(active_pitches)
+        if len(active_zcr) > 0:
+            pitch_stdev = np.std(active_zcr) * 1000 # Scaling factor to roughly match 0-400 range of piptrack std
         else:
-            pitch_stdev = 400 # Default/fallback
+            pitch_stdev = 400 
             
         pitch_score = max(0.0, 1.0 - (pitch_stdev / 400.0))
         
@@ -182,8 +182,8 @@ def score():
         return jsonify({
             "final_score": final_score,
             "metrics": {
-                "pitch_score": pitch_score,
-                "energy_score": energy_score,
+                "pitch_score": float(pitch_score),
+                "energy_score": float(energy_score),
                 "pitch_stdev": float(pitch_stdev),
                 "mean_rms": float(mean_rms)
             }
@@ -209,6 +209,10 @@ def stream_process():
     try:
         audio_file.save(temp_filepath)
         
+        # Check if the file is extremely small or empty (Whisper API crashes on 0-byte files)
+        if os.path.getsize(temp_filepath) < 100:
+            return jsonify({"error": "Audio recording is too short or empty"}), 400
+            
         # Transcription
         with open(temp_filepath, "rb") as file_to_transcribe:
             transcription = client.audio.transcriptions.create(
@@ -219,7 +223,7 @@ def stream_process():
         text = transcription.text
         word_count = len(text.split())
         
-        # Audio length using librosa or soundfile
+        # Audio length using librosa (since soundfile cannot decode webm)
         y, sr = librosa.load(temp_filepath, sr=None)
         duration = librosa.get_duration(y=y, sr=sr)
         
@@ -231,11 +235,10 @@ def stream_process():
         session_id = request.form.get('session_id')
         timestamp_sec = float(request.form.get('timestamp_sec', 0.0))
         
-        # Combined Confidence: Weighted mix of pitch stability and volume
-        pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
-        median_mag = np.median(magnitudes)
-        active_pitches = pitches[magnitudes > median_mag]
-        pitch_stdev = np.std(active_pitches) if len(active_pitches) > 0 else 400
+        # Combined Confidence: Faster heuristics for pitch variance and volume
+        zcr = librosa.feature.zero_crossing_rate(y)
+        active_zcr = zcr[zcr > np.median(zcr)]
+        pitch_stdev = (np.std(active_zcr) * 1000) if len(active_zcr) > 0 else 400
         pitch_score = max(0.0, 1.0 - (pitch_stdev / 400.0))
         
         mean_rms = np.mean(librosa.feature.rms(y=y))
