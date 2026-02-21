@@ -37,6 +37,7 @@ interface InterviewStore {
   setJobText: (text: string) => void;
   addBiometricPoint: (point: BiometricPoint) => void;
   addTranscriptEntry: (entry: TranscriptEntry) => void;
+  updateLastTranscriptText: (text: string) => void;
   setLiveAlert: (alert: string | null) => void;
   startInterview: () => void;
   finishInterview: () => void;
@@ -61,6 +62,15 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
     set((state) => ({ biometrics: [...state.biometrics, point] })),
   addTranscriptEntry: (entry) =>
     set((state) => ({ transcript: [...state.transcript, entry] })),
+  updateLastTranscriptText: (text) =>
+    set((state) => {
+      if (state.transcript.length === 0) return state;
+      const last = state.transcript[state.transcript.length - 1];
+      const updated = { ...last, text: last.text + text };
+      const newList = [...state.transcript];
+      newList[newList.length - 1] = updated;
+      return { transcript: newList };
+    }),
   setLiveAlert: (alert) => set({ liveAlert: alert }),
   startInterview: () =>
     set({ phase: "live", interviewStartTime: Date.now() }),
