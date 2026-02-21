@@ -27,7 +27,9 @@ create table public.interview_keyframes (
   severity keyframe_severity default 'neutral', -- How actionable this moment is for the final dashboard
   
   -- Transcription / Context
+  interviewer_question text,      -- The question asked by the AI
   associated_transcript text,     -- What the candidate was saying at this exact moment
+  ai_response text,               -- The AI's evaluation or follow-up response
 
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );

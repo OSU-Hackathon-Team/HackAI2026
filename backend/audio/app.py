@@ -7,6 +7,14 @@ import numpy as np
 import librosa
 import soundfile as sf
 import requests
+import time
+import cv2
+import torch
+import torch.nn.functional as F
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from scipy.interpolate import interp1d
 
 import sys
 import os
@@ -18,6 +26,7 @@ if parent_dir not in sys.path:
 from supabase_client import supabase_logger
 from dotenv import load_dotenv
 from openai import OpenAI
+from video.models import VisualConfidenceModel
 
 load_dotenv() # Load variables from .env
 
@@ -32,6 +41,107 @@ INTERVIEW_QUESTIONS = [
     "That's interesting. How do you approach debugging a complex problem in your code?",
     "Great. Finally, why are you interested in this specific project for HackAI?"
 ]
+
+# --- VIDEO CONFIG ---
+MODELS_DIR = os.path.join(parent_dir, "models")
+VISUAL_MODEL_PATH = os.path.join(MODELS_DIR, "visual_confidence.pth")
+FACE_TASK_PATH = os.path.join(MODELS_DIR, "face_landmarker.task")
+HAND_TASK_PATH = os.path.join(MODELS_DIR, "hand_landmarker.task")
+INPUT_DIM = 178
+SEQUENCE_LENGTH = 30
+WINDOW_SIZE_MS = 1000
+
+# Global Model & MP Initialization
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+visual_model = VisualConfidenceModel(input_dim=INPUT_DIM)
+if os.path.exists(VISUAL_MODEL_PATH):
+    visual_model.load_state_dict(torch.load(VISUAL_MODEL_PATH, map_location=device))
+visual_model.to(device).eval()
+
+# MediaPipe
+base_options = python.BaseOptions(model_asset_path=FACE_TASK_PATH)
+face_options = vision.FaceLandmarkerOptions(
+    base_options=base_options,
+    output_face_blendshapes=True,
+    num_faces=1,
+    running_mode=vision.RunningMode.IMAGE)
+face_landmarker = vision.FaceLandmarker.create_from_options(face_options)
+
+hand_base_options = python.BaseOptions(model_asset_path=HAND_TASK_PATH)
+hand_options = vision.HandLandmarkerOptions(
+    base_options=hand_base_options,
+    num_hands=2,
+    running_mode=vision.RunningMode.IMAGE)
+hand_landmarker = vision.HandLandmarker.create_from_options(hand_options)
+
+def process_mediapipe_results(face_result, hand_result):
+    bs = [0.0] * 52
+    if face_result and face_result.face_blendshapes:
+        bs = [b.score for b in face_result.face_blendshapes[0]]
+    lh = np.zeros(63)
+    rh = np.zeros(63)
+    if hand_result and hand_result.hand_landmarks:
+        for i, hand_lms in enumerate(hand_result.hand_landmarks):
+            if i < len(hand_result.handedness):
+                side = hand_result.handedness[i][0].category_name
+                landmarks = np.array([[lm.x, lm.y, lm.z] for lm in hand_lms]).flatten()
+                if side.lower() == 'left': lh = landmarks
+                else: rh = landmarks
+    return np.concatenate([bs, lh, rh])
+
+def extract_video_metrics(video_path):
+    try:
+        cap = cv2.VideoCapture(video_path)
+        feature_history = []
+        frame_count = 0
+        
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret: break
+            
+            frame_count += 1
+            if frame_count % 3 != 0: continue # Skip more frames for speed
+            
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+            timestamp_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
+            
+            face_res = face_landmarker.detect(mp_image)
+            hand_res = hand_landmarker.detect(mp_image)
+            feat = process_mediapipe_results(face_res, hand_res)
+            feature_history.append((timestamp_ms, feat))
+            
+        cap.release()
+        
+        if len(feature_history) < 5:
+            return 0.5, 0.8, 0.1 # Defaults
+            
+        # Visual Confidence Inference
+        window_data = np.array([f for t, f in feature_history])
+        window_times = np.array([t for t, f in feature_history])
+        target_ts = np.linspace(window_times[0], window_times[-1], SEQUENCE_LENGTH)
+        
+        f_interp = interp1d(window_times, window_data, axis=0, kind='linear', fill_value="extrapolate")
+        resampled_seq = f_interp(target_ts)
+        input_tensor = torch.FloatTensor(resampled_seq).unsqueeze(0).to(device)
+        
+        with torch.no_grad():
+            logits = visual_model(input_tensor)
+            probs = F.softmax(logits, dim=1)
+            visual_confidence = probs[0][1].item()
+
+        # Heuristics for Gaze and Fidget
+        face_feats = window_data[:, :52]
+        gaze_score = 1.0 - np.mean(face_feats[:, 13:15]) 
+        
+        hand_feats = window_data[:, 52:]
+        fidget_index = min(1.0, np.std(hand_feats) * 5.0) 
+        
+        return float(visual_confidence), float(gaze_score), float(fidget_index)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return 0.5, 0.8, 0.1
 
 @app.route('/heartbeat', methods=['GET'])
 def heartbeat():
@@ -101,12 +211,30 @@ def chat():
         ai_response = completion.choices[0].message.content
         
         session_id = data.get('session_id')
+        metrics = data.get('metrics', {})
+        
         if session_id:
+            # Determine the question that was just answered
+            q_text = "Intro / Start"
+            if 0 <= question_index < len(INTERVIEW_QUESTIONS):
+                q_text = INTERVIEW_QUESTIONS[question_index]
+            
             supabase_logger.log_keyframe(
                 session_id=session_id,
                 timestamp_sec=float(question_index),
-                keyframe_reason=f"Chat QA - Q{question_index + 1}",
-                associated_transcript=f"Candidate: {user_text}\nAI: {ai_response}",
+                interviewer_question=q_text,
+                associated_transcript=user_text,
+                ai_response=ai_response,
+                # Metrics from payload if available
+                volume_rms=metrics.get('volume_rms'),
+                pitch_stdev=metrics.get('pitch_stdev'),
+                pacing_wpm=metrics.get('pacing_wpm'),
+                is_audibly_confident=metrics.get('confidence_score', 0) >= 0.5,
+                gaze_score=metrics.get('v_gaze'),
+                fidget_index=metrics.get('v_fidget'),
+                is_visually_confident=metrics.get('v_conf', 0) >= 0.5,
+                overall_confidence_score=metrics.get('confidence_score'),
+                keyframe_reason=f"Unified Turn - Q{question_index + 1}",
                 severity="neutral"
             )
 
@@ -154,7 +282,8 @@ def score():
     try:
         audio_file.save(temp_filepath)
         
-        y, sr = sf.read(temp_filepath)
+        # Audio Analysis
+        y, sr = librosa.load(temp_filepath, sr=None)
         if len(y.shape) > 1:
             y = y.mean(axis=1) # downmix to mono if needed
             
@@ -246,19 +375,20 @@ def stream_process():
         
         confidence_score = (pitch_score * 0.4) + (energy_score * 0.6)
         
-        # Log to Supabase
-        if session_id:
-            supabase_logger.log_keyframe(
-                session_id=session_id,
-                timestamp_sec=timestamp_sec,
-                volume_rms=float(mean_rms),
-                pitch_stdev=float(pitch_stdev),
-                pacing_wpm=float(pacing_wpm),
-                is_audibly_confident=bool(confidence_score >= 0.5),
-                overall_confidence_score=float(confidence_score),
-                keyframe_reason="Audio processed successfully",
-                associated_transcript=text
-            )
+        # Multimodal Integration: Extract Video Metrics if available
+        video_file = request.files.get('video')
+        v_conf, v_gaze, v_fidget = 0.5, 0.8, 0.1 # Defaults
+        
+        if video_file:
+            v_filename = f"v_{uuid.uuid4().hex}.webm"
+            v_path = os.path.join(tempfile.gettempdir(), v_filename)
+            video_file.save(v_path)
+            try:
+                v_conf, v_gaze, v_fidget = extract_video_metrics(v_path)
+            except Exception as ve:
+                print(f"Video extraction failed: {ve}")
+            finally:
+                if os.path.exists(v_path): os.remove(v_path)
         
         return jsonify({
             "text": text,
@@ -267,7 +397,12 @@ def stream_process():
                 "pacing_score": float(pacing_score),
                 "confidence_score": float(confidence_score),
                 "word_count": word_count,
-                "duration_seconds": float(duration)
+                "duration_seconds": float(duration),
+                "v_conf": float(v_conf),
+                "v_gaze": float(v_gaze),
+                "v_fidget": float(v_fidget),
+                "volume_rms": float(mean_rms),
+                "pitch_stdev": float(pitch_stdev)
             }
         })
     except Exception as e:
@@ -280,5 +415,5 @@ def stream_process():
                 print(f"Failed to delete temp file {temp_filepath}: {e}")
 
 if __name__ == '__main__':
-    # Run server
-    app.run(debug=True, port=5000)
+    print("Starting Flask server on http://127.0.0.1:5000")
+    app.run(debug=False, port=5000)
