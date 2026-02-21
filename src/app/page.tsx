@@ -27,12 +27,7 @@ function SkillBar({ label, value, color, visible }: { label: string; value: numb
         <span style={{ fontSize: "0.85rem", fontFamily: "var(--mono)", color }}>{value}%</span>
       </div>
       <div style={{ height: "5px", background: "#1e2a3a", borderRadius: "99px", overflow: "hidden" }}>
-        <div style={{
-          height: "100%", borderRadius: "99px", background: color,
-          width: visible ? `${value}%` : "0%",
-          transition: "width 1.2s cubic-bezier(0.16, 1, 0.3, 1)",
-          boxShadow: `0 0 12px ${color}88`,
-        }} />
+        <div style={{ height: "100%", borderRadius: "99px", background: color, width: visible ? `${value}%` : "0%", transition: "width 1.2s cubic-bezier(0.16, 1, 0.3, 1)", boxShadow: `0 0 12px ${color}88` }} />
       </div>
     </div>
   );
@@ -40,11 +35,7 @@ function SkillBar({ label, value, color, visible }: { label: string; value: numb
 
 function FeatureCard({ icon, title, desc, accent }: { icon: string; title: string; desc: string; accent: string }) {
   return (
-    <div style={{
-      background: "#0e1420", border: "1px solid #1e2a3a", borderRadius: "16px", padding: "1.75rem",
-      borderTop: `2px solid ${accent}`,
-      transition: "transform 0.2s ease, box-shadow 0.2s ease",
-    }}
+    <div style={{ background: "#0e1420", border: "1px solid #1e2a3a", borderRadius: "16px", padding: "1.75rem", borderTop: `2px solid ${accent}`, transition: "transform 0.2s ease, box-shadow 0.2s ease" }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLElement).style.boxShadow = `0 12px 40px ${accent}22`; }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
     >
@@ -57,37 +48,9 @@ function FeatureCard({ icon, title, desc, accent }: { icon: string; title: strin
   );
 }
 
-function TestimonialCard({ name, role, text, initial, accent }: { name: string; role: string; text: string; initial: string; accent: string }) {
+function TeamCard({ name, title, domain, accent, imageSrc, skills }: { name: string; title: string; domain: string; accent: string; imageSrc: string; skills: string[] }) {
   return (
-    <div style={{
-      background: "#0e1420", border: "1px solid #1e2a3a", borderRadius: "16px",
-      padding: "1.5rem", minWidth: "300px", maxWidth: "340px", flexShrink: 0,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
-        <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: `${accent}22`, border: `1px solid ${accent}44`, display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontWeight: 700, fontSize: "0.9rem", flexShrink: 0 }}>
-          {initial}
-        </div>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: "0.875rem", color: "#e8edf5" }}>{name}</div>
-          <div style={{ fontSize: "0.72rem", color: "#5a6a82", fontFamily: "var(--mono)" }}>{role}</div>
-        </div>
-      </div>
-      <p style={{ fontSize: "0.85rem", lineHeight: 1.65, color: "#8899aa", fontFamily: "var(--mono)" }}>"{text}"</p>
-    </div>
-  );
-}
-
-function TeamCard({ name, title, domain, accent, imageSrc, skills }: {
-  name: string; title: string; domain: string;
-  accent: string; imageSrc: string; skills: string[];
-}) {
-  return (
-    <div style={{
-      background: "#0e1420", border: "1px solid #1e2a3a", borderRadius: "16px",
-      padding: "1.75rem", display: "flex", flexDirection: "column", gap: "1.25rem",
-      borderTop: `2px solid ${accent}`,
-      transition: "transform 0.2s ease, box-shadow 0.2s ease",
-    }}
+    <div style={{ background: "#0e1420", border: "1px solid #1e2a3a", borderRadius: "16px", padding: "1.75rem", display: "flex", flexDirection: "column", gap: "1.25rem", borderTop: `2px solid ${accent}`, transition: "transform 0.2s ease, box-shadow 0.2s ease" }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-3px)"; (e.currentTarget as HTMLElement).style.boxShadow = `0 12px 40px ${accent}18`; }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(0)"; (e.currentTarget as HTMLElement).style.boxShadow = "none"; }}
     >
@@ -138,16 +101,16 @@ function MockUI() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", minHeight: "300px" }}>
           <div style={{ background: "linear-gradient(135deg, #080b12, #0e1420)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem", gap: "1rem" }}>
             <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "linear-gradient(135deg, #7b61ff, #00e5ff)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 40px rgba(0,229,255,0.25)" }}>
-                <img src="/robot.png" alt="AI Interviewer" style={{ width: "48px", height: "48px", objectFit: "contain", filter: "brightness(0) invert(1) opacity(0.9)" }} />
-              </div>
+              <img src="/robot.png" alt="AI Interviewer" style={{ width: "48px", height: "48px", objectFit: "contain", filter: "brightness(0) invert(1) opacity(0.9)" }} />
+            </div>
             <div style={{ color: "#e8edf5", fontWeight: 600, fontSize: "0.9rem" }}>AI Interviewer</div>
             <div style={{ background: "rgba(0,229,255,0.08)", border: "1px solid rgba(0,229,255,0.25)", borderRadius: "99px", padding: "0.25rem 0.75rem", fontSize: "0.65rem", color: "#00e5ff", fontFamily: "var(--mono)" }}>● SPEAKING</div>
             <div style={{ display: "flex", gap: "1.5rem", marginTop: "0.5rem" }}>
-              {[["GAZE", "88", "#00e5ff"], ["CONF", "82", "#7b61ff"], ["CALM", "91", "#00e096"]].map(([l, v, c]) => (
+              {[["GAZE","88","#00e5ff"],["CONF","82","#7b61ff"],["CALM","91","#00e096"]].map(([l,v,c]) => (
                 <div key={l} style={{ textAlign: "center" }}>
                   <svg width="48" height="48" viewBox="0 0 48 48">
                     <circle cx="24" cy="24" r="18" fill="none" stroke="#1e2a3a" strokeWidth="3" />
-                    <circle cx="24" cy="24" r="18" fill="none" stroke={c} strokeWidth="3" strokeDasharray={`${2 * Math.PI * 18 * parseInt(v) / 100} ${2 * Math.PI * 18}`} strokeLinecap="round" transform="rotate(-90 24 24)" />
+                    <circle cx="24" cy="24" r="18" fill="none" stroke={c} strokeWidth="3" strokeDasharray={`${2*Math.PI*18*parseInt(v)/100} ${2*Math.PI*18}`} strokeLinecap="round" transform="rotate(-90 24 24)" />
                     <text x="24" y="28" textAnchor="middle" fill={c} fontSize="9" fontFamily="monospace" fontWeight="600">{v}</text>
                   </svg>
                   <div style={{ fontSize: "0.5rem", color: "#5a6a82", letterSpacing: "0.12em", fontFamily: "monospace" }}>{l}</div>
@@ -158,10 +121,10 @@ function MockUI() {
           <div style={{ padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem", borderLeft: "1px solid #1e2a3a" }}>
             <div style={{ fontSize: "0.62rem", letterSpacing: "0.12em", color: "#5a6a82", fontFamily: "var(--mono)", textTransform: "uppercase" }}>Live Transcript</div>
             {[
-              { s: "AI", t: "Tell me about a challenging project you've worked on.", c: "#00e5ff" },
+              { s: "AI",  t: "Tell me about a challenging project you've worked on.", c: "#00e5ff" },
               { s: "YOU", t: "Sure — I built a real-time pipeline processing 10k events/sec...", c: "#7b61ff" },
-              { s: "AI", t: "How did you handle failure states?", c: "#00e5ff" },
-            ].map((m, i) => (
+              { s: "AI",  t: "How did you handle failure states?", c: "#00e5ff" },
+            ].map((m,i) => (
               <div key={i} style={{ display: "flex", gap: "0.5rem" }}>
                 <span style={{ fontSize: "0.6rem", fontFamily: "var(--mono)", fontWeight: 700, color: m.c, paddingTop: "2px", flexShrink: 0 }}>{m.s}</span>
                 <p style={{ fontSize: "0.75rem", lineHeight: 1.5, color: "#8899aa", fontFamily: "var(--mono)" }}>{m.t}</p>
@@ -175,146 +138,197 @@ function MockUI() {
   );
 }
 
-export default function LandingPage() {
-  const personalizedRef = useScrollReveal();
-  const feedbackRef = useScrollReveal();
-  const featuresRef = useScrollReveal();
-  const testimonialsRef = useScrollReveal();
-  const teamRef = useScrollReveal();
-  const faqRef = useScrollReveal();
-  const ctaRef = useScrollReveal();
+// ─── 3D TESTIMONIALS CLOUD ────────────────────────────────────────────────────
+const TESTIMONIALS = [
+  { initial: "S", name: "Suchith M.",    role: "ECE Student → NVIDIA Intern",     accent: "#00e5ff", text: "The gaze feedback was eye-opening. I didn't realize I look away when I'm thinking — now I consciously anchor my eyes and it makes a huge difference." },
+  { initial: "J", name: "Jacob B.",      role: "Career Switcher → SWE at Stripe", accent: "#7b61ff", text: "Being able to click on a stress spike and immediately hear what I was saying at that moment is genuinely brilliant." },
+  { initial: "C", name: "Cooper B.",     role: "CS Student",                      accent: "#00e096", text: "I went in cold for my first interview and bombed it. After three sessions with AceIt my confidence scores jumped from 54 to 83." },
+  { initial: "D", name: "Darquavius S.", role: "Masters Student → Meta",          accent: "#ff4d6d", text: "The AI interviewer asked me things I didn't expect — it had clearly read my resume carefully. Much harder than the real interview, honestly." },
+  { initial: "A", name: "Aisha K.",      role: "PM → Google L4",                  accent: "#febc2e", text: "I used to freeze when asked about weaknesses. AceIt replayed three moments where my voice dropped — and helped me reframe them completely." },
+  { initial: "R", name: "Rohan P.",      role: "Bootcamp Grad → Shopify",         accent: "#00e5ff", text: "Seeing my fidget index spike exactly when I was asked a system design question was humbling. But also incredibly useful." },
+  { initial: "M", name: "Maya T.",       role: "New Grad → Coinbase",             accent: "#7b61ff", text: "The voice confidence breakdown showed I rush when nervous. I practiced slowing down and my offer came two weeks later." },
+  { initial: "L", name: "Leo B.",        role: "PhD → Quant at Jane Street",      accent: "#00e096", text: "It caught that I avoid eye contact right after technical explanations. That's gold-level feedback you'd only get from a professional coach." },
+];
 
-  const heroMockRef = useRef<HTMLDivElement>(null);
+// x/y = viewport-relative offset from center (vw/vh), layer = depth (0=close, 2=far)
+const CARD_LAYOUT = [
+  { x: -36, y: -22, layer: 0, rot: -3 },
+  { x:  32, y: -30, layer: 2, rot:  5 },
+  { x: -46, y:  10, layer: 1, rot: -6 },
+  { x:  40, y:  18, layer: 0, rot:  3 },
+  { x:  -8, y: -40, layer: 2, rot:  7 },
+  { x:  18, y:  36, layer: 1, rot: -4 },
+  { x: -28, y:  40, layer: 0, rot:  6 },
+  { x:  50, y:  -8, layer: 1, rot: -3 },
+];
 
-  const [heroLoaded, setHeroLoaded] = useState(false);
+// Per depth layer: how much it moves with scroll, opacity, scale, blur
+const LAYER = [
+  { parallax: 1.0,  opacity: 1,    scale: 1,    blur: 0   }, // front
+  { parallax: 0.5,  opacity: 0.68, scale: 0.87, blur: 0.8 }, // mid
+  { parallax: 0.18, opacity: 0.38, scale: 0.74, blur: 2.2 }, // back
+];
+
+function TestimonialsCloud() {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [pct, setPct] = useState(0); // 0..1 through the scrollable range
+
   useEffect(() => {
-    const t = setTimeout(() => setHeroLoaded(true), 100);
-    return () => clearTimeout(t);
+    const onScroll = () => {
+      const el = sectionRef.current;
+      if (!el) return;
+      const scrolled = -el.getBoundingClientRect().top;
+      const total    = el.offsetHeight - window.innerHeight;
+      setPct(Math.min(Math.max(scrolled / total, 0), 1));
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  return (
+    <div ref={sectionRef} style={{ position: "relative", height: "230vh" }}>
+      <div style={{
+        position: "sticky", top: 0, height: "100vh", overflow: "hidden",
+        background: "var(--surface)",
+        borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)",
+      }}>
+        {/* Background glow */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none",
+          background: "radial-gradient(ellipse 75% 60% at 50% 50%, rgba(0,229,255,0.04) 0%, transparent 70%)" }} />
+
+        {/* Section label */}
+        <div style={{ position: "absolute", top: "2.5rem", left: 0, right: 0, textAlign: "center", zIndex: 20, pointerEvents: "none" }}>
+          <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "0.6rem" }}>04 — Reviews</div>
+          <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.6rem)", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)" }}>What people are saying</h2>
+          <p style={{ fontSize: "0.7rem", fontFamily: "var(--mono)", color: "var(--muted)", marginTop: "0.4rem", opacity: Math.max(1 - pct * 3, 0) }}>Scroll to explore ↓</p>
+        </div>
+
+        {/* Cards */}
+        {TESTIMONIALS.map((t, i) => {
+          const layout  = CARD_LAYOUT[i];
+          const cfg     = LAYER[layout.layer];
+          // Scroll drives each card through a vertical range; deeper = less movement
+          const yShift  = (pct - 0.5) * 380 * cfg.parallax;
+          // Alternating subtle x drift adds organic feel
+          const xDrift  = (pct - 0.5) * 60 * cfg.parallax * (i % 2 === 0 ? 1 : -1);
+
+          return (
+            <div key={i} style={{
+              position: "absolute",
+              left:      `calc(50% + ${layout.x}vw + ${xDrift}px)`,
+              top:       `calc(50% + ${layout.y}vh + ${yShift}px)`,
+              transform: `translate(-50%, -50%) rotate(${layout.rot}deg) scale(${cfg.scale})`,
+              opacity:    cfg.opacity,
+              filter:     cfg.blur > 0 ? `blur(${cfg.blur}px)` : "none",
+              zIndex:     10 - layout.layer,
+              width:      "clamp(210px, 20vw, 290px)",
+              willChange: "transform",
+            }}>
+              <div style={{
+                background: "#0b1220",
+                border: "1px solid rgba(255,255,255,0.06)",
+                borderTop: `2px solid ${t.accent}`,
+                borderRadius: "14px",
+                padding: "1.1rem 1.25rem",
+                boxShadow: `0 8px 32px ${t.accent}12, 0 2px 8px rgba(0,0,0,0.5)`,
+                transition: "transform 0.25s ease, box-shadow 0.25s ease",
+                cursor: "default",
+              }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.transform = "translateY(-5px) scale(1.04)";
+                  (e.currentTarget as HTMLElement).style.boxShadow = `0 20px 50px ${t.accent}2e, 0 2px 8px rgba(0,0,0,0.5)`;
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.transform = "";
+                  (e.currentTarget as HTMLElement).style.boxShadow = `0 8px 32px ${t.accent}12, 0 2px 8px rgba(0,0,0,0.5)`;
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.8rem" }}>
+                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: `${t.accent}18`, border: `1px solid ${t.accent}40`, display: "flex", alignItems: "center", justifyContent: "center", color: t.accent, fontWeight: 700, fontSize: "0.8rem", flexShrink: 0 }}>
+                    {t.initial}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: "0.78rem", color: "#d4dce8", lineHeight: 1.2 }}>{t.name}</div>
+                    <div style={{ fontSize: "0.6rem", color: "#4a5870", fontFamily: "var(--mono)", marginTop: "1px" }}>{t.role}</div>
+                  </div>
+                </div>
+                <p style={{ fontSize: "0.74rem", lineHeight: 1.68, color: "#6a7a8e", fontFamily: "var(--mono)" }}>"{t.text}"</p>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Radial vignette — cards fade out at edges */}
+        <div style={{
+          position: "absolute", inset: 0, pointerEvents: "none", zIndex: 15,
+          background: "radial-gradient(ellipse 88% 78% at 50% 50%, transparent 48%, var(--surface) 100%)",
+        }} />
+
+        {/* Progress bar */}
+        <div style={{ position: "absolute", bottom: "1.75rem", left: "50%", transform: "translateX(-50%)", zIndex: 20, display: "flex", alignItems: "center", gap: "5px" }}>
+          <div style={{ height: "3px", borderRadius: "99px", background: "var(--cyan)", width: `${16 + pct * 48}px`, transition: "width 0.1s ease", boxShadow: "0 0 6px rgba(0,229,255,0.5)" }} />
+          <div style={{ width: "3px", height: "3px", borderRadius: "50%", background: pct > 0.4 ? "var(--cyan)" : "#1e2a3a", transition: "background 0.3s" }} />
+          <div style={{ width: "3px", height: "3px", borderRadius: "50%", background: pct > 0.85 ? "var(--cyan)" : "#1e2a3a", transition: "background 0.3s" }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+export default function LandingPage() {
+  const personalizedRef = useScrollReveal();
+  const feedbackRef     = useScrollReveal();
+  const featuresRef     = useScrollReveal();
+  const teamRef         = useScrollReveal();
+  const faqRef          = useScrollReveal();
+  const ctaRef          = useScrollReveal();
+  const heroMockRef     = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const handleScroll = () => {
+    const onScroll = () => {
       if (!heroMockRef.current) return;
-      const translateY = Math.min(window.scrollY * 0.3, 80);
-      heroMockRef.current.style.transform = `translateY(-${translateY}px)`;
+      heroMockRef.current.style.transform = `translateY(-${Math.min(window.scrollY * 0.3, 80)}px)`;
     };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
-        :root {
-          --display: 'Syne', sans-serif;
-          --mono: 'DM Mono', monospace;
-          --bg: #080b12;
-          --surface: #0e1420;
-          --border: #1e2a3a;
-          --cyan: #00e5ff;
-          --purple: #7b61ff;
-          --green: #00e096;
-          --pink: #ff4d6d;
-          --text: #e8edf5;
-          --muted: #5a6a82;
-        }
+        :root { --display: 'Syne', sans-serif; --mono: 'DM Mono', monospace; --bg: #080b12; --surface: #0e1420; --border: #1e2a3a; --cyan: #00e5ff; --purple: #7b61ff; --green: #00e096; --pink: #ff4d6d; --text: #e8edf5; --muted: #5a6a82; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html { scroll-behavior: smooth; }
         body { background: var(--bg); color: var(--text); font-family: var(--display); overflow-x: hidden; }
-        body::before {
-          content: "";
-          position: fixed; inset: 0;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-          pointer-events: none; z-index: 999; opacity: 0.35;
-        }
-
+        body::before { content: ""; position: fixed; inset: 0; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"); pointer-events: none; z-index: 999; opacity: 0.35; }
         .lp-reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease-out, transform 0.5s ease-out; }
         .lp-reveal.visible { opacity: 1; transform: translateY(0); }
-
         .nav-link { color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: color 0.15s ease; font-family: var(--mono); letter-spacing: 0.04em; }
         .nav-link:hover { color: var(--cyan); }
-
-        .btn-primary {
-          display: inline-flex; align-items: center; gap: 0.5rem;
-          background: var(--cyan); color: var(--bg);
-          font-family: var(--display); font-weight: 700; font-size: 0.9rem;
-          padding: 0.8rem 1.75rem; border-radius: 8px; border: none;
-          cursor: pointer; text-decoration: none; letter-spacing: 0.02em;
-          transition: all 0.2s ease; box-shadow: 0 0 24px rgba(0,229,255,0.25);
-        }
+        .btn-primary { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--cyan); color: var(--bg); font-family: var(--display); font-weight: 700; font-size: 0.9rem; padding: 0.8rem 1.75rem; border-radius: 8px; border: none; cursor: pointer; text-decoration: none; letter-spacing: 0.02em; transition: all 0.2s ease; box-shadow: 0 0 24px rgba(0,229,255,0.25); }
         .btn-primary:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,229,255,0.35); }
-
-        .btn-ghost {
-          display: inline-flex; align-items: center; gap: 0.5rem;
-          background: transparent; color: var(--muted);
-          font-family: var(--mono); font-weight: 500; font-size: 0.85rem;
-          padding: 0.7rem 1.25rem; border-radius: 8px; border: 1px solid var(--border);
-          cursor: pointer; text-decoration: none; transition: all 0.2s ease;
-        }
+        .btn-ghost { display: inline-flex; align-items: center; gap: 0.5rem; background: transparent; color: var(--muted); font-family: var(--mono); font-weight: 500; font-size: 0.85rem; padding: 0.7rem 1.25rem; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; text-decoration: none; transition: all 0.2s ease; }
         .btn-ghost:hover { border-color: var(--cyan); color: var(--cyan); }
-
-        @keyframes heroFadeUp {
-          from { opacity: 0; transform: translateY(32px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes orbPulse {
-          0%, 100% { transform: scale(1) translate(-50%, -50%); opacity: 0.5; }
-          50%       { transform: scale(1.12) translate(-45%, -48%); opacity: 0.85; }
-        }
-        @keyframes orbPulse2 {
-          0%, 100% { transform: scale(1) translate(-50%, -50%); opacity: 0.3; }
-          50%       { transform: scale(1.18) translate(-55%, -52%); opacity: 0.6; }
-        }
-        @keyframes scanLine {
-          0%   { transform: translateY(-100%); opacity: 0; }
-          8%   { opacity: 0.8; }
-          92%  { opacity: 0.8; }
-          100% { transform: translateY(100vh); opacity: 0; }
-        }
-        @keyframes gridFadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        @keyframes mockSlideUp {
-          from { opacity: 0; transform: translateY(56px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-
-        .hero-grid {
-          opacity: 0;
-          animation: gridFadeIn 2s ease 0.2s forwards;
-        }
-        .scan-line {
-          animation: scanLine 3.5s ease-in-out 0.6s forwards;
-        }
-        .hero-badge {
-          opacity: 0;
-          animation: heroFadeUp 1s cubic-bezier(0.16, 1, 0.3, 1) 0.5s forwards;
-        }
-        .hero-h1 {
-          opacity: 0;
-          animation: heroFadeUp 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.9s forwards;
-        }
-        .hero-sub {
-          opacity: 0;
-          animation: heroFadeUp 1s cubic-bezier(0.16, 1, 0.3, 1) 1.35s forwards;
-        }
-        .hero-cta {
-          opacity: 0;
-          animation: heroFadeUp 1s cubic-bezier(0.16, 1, 0.3, 1) 1.7s forwards;
-        }
-        .hero-mock {
-          opacity: 0;
-          animation: mockSlideUp 1.2s cubic-bezier(0.16, 1, 0.3, 1) 2.1s forwards;
-        }
+        @keyframes heroFadeUp { from { opacity: 0; transform: translateY(32px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes orbPulse { 0%,100% { transform: scale(1) translate(-50%,-50%); opacity:.5; } 50% { transform: scale(1.12) translate(-45%,-48%); opacity:.85; } }
+        @keyframes orbPulse2 { 0%,100% { transform: scale(1) translate(-50%,-50%); opacity:.3; } 50% { transform: scale(1.18) translate(-55%,-52%); opacity:.6; } }
+        @keyframes scanLine { 0% { transform:translateY(-100%); opacity:0; } 8% { opacity:.8; } 92% { opacity:.8; } 100% { transform:translateY(100vh); opacity:0; } }
+        @keyframes gridFadeIn { from { opacity:0; } to { opacity:1; } }
+        @keyframes mockSlideUp { from { opacity:0; transform:translateY(56px); } to { opacity:1; transform:translateY(0); } }
+        .hero-grid  { opacity:0; animation: gridFadeIn 2s ease 0.2s forwards; }
+        .scan-line  { animation: scanLine 3.5s ease-in-out 0.6s forwards; }
+        .hero-badge { opacity:0; animation: heroFadeUp 1s cubic-bezier(.16,1,.3,1) .5s forwards; }
+        .hero-h1    { opacity:0; animation: heroFadeUp 1.1s cubic-bezier(.16,1,.3,1) .9s forwards; }
+        .hero-sub   { opacity:0; animation: heroFadeUp 1s cubic-bezier(.16,1,.3,1) 1.35s forwards; }
+        .hero-cta   { opacity:0; animation: heroFadeUp 1s cubic-bezier(.16,1,.3,1) 1.7s forwards; }
+        .hero-mock  { opacity:0; animation: mockSlideUp 1.2s cubic-bezier(.16,1,.3,1) 2.1s forwards; }
       `}</style>
 
       {/* ── NAV ── */}
       <nav style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(8,11,18,0.85)", backdropFilter: "blur(16px)", borderBottom: "1px solid #1e2a3a", padding: "0 2.5rem", height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontWeight: 800, fontSize: "1.2rem", letterSpacing: "-0.03em" }}>
-          Ace<span style={{ color: "var(--cyan)" }}>It</span>
-        </div>
+        <div style={{ fontWeight: 800, fontSize: "1.2rem", letterSpacing: "-0.03em" }}>Ace<span style={{ color: "var(--cyan)" }}>It</span></div>
         <div style={{ display: "flex", gap: "2.5rem" }}>
           <a href="#features" className="nav-link">Features</a>
           <a href="#feedback" className="nav-link">How it works</a>
@@ -323,12 +337,8 @@ export default function LandingPage() {
         </div>
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
           <SignedOut>
-            <SignInButton mode="modal">
-              <button className="btn-ghost">Log in</button>
-            </SignInButton>
-            <SignUpButton mode="modal">
-              <button className="btn-primary">Start free →</button>
-            </SignUpButton>
+            <SignInButton mode="modal"><button className="btn-ghost">Log in</button></SignInButton>
+            <SignUpButton mode="modal"><button className="btn-primary">Start free →</button></SignUpButton>
           </SignedOut>
           <SignedIn>
             <Link href="/upload" className="btn-primary">Start interview →</Link>
@@ -339,42 +349,17 @@ export default function LandingPage() {
 
       {/* ── HERO ── */}
       <section style={{ minHeight: "100vh", position: "relative", display: "flex", flexDirection: "column", alignItems: "center", padding: "6rem 2rem 0", textAlign: "center", overflow: "hidden" }}>
-        <div className="hero-grid" style={{
-          position: "absolute", inset: 0, zIndex: 0,
-          backgroundImage: "linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px)",
-          backgroundSize: "60px 60px",
-          maskImage: "radial-gradient(ellipse 80% 60% at 50% 40%, black 20%, transparent 80%)",
-          WebkitMaskImage: "radial-gradient(ellipse 80% 60% at 50% 40%, black 20%, transparent 80%)",
-        }} />
-        <div className="scan-line" style={{
-          position: "absolute", left: 0, right: 0, height: "2px", zIndex: 1,
-          background: "linear-gradient(90deg, transparent, rgba(0,229,255,0.6), transparent)",
-          pointerEvents: "none",
-        }} />
-        <div style={{
-          position: "absolute", width: "600px", height: "600px", borderRadius: "50%", zIndex: 0,
-          background: "radial-gradient(circle, rgba(0,229,255,0.1) 0%, transparent 70%)",
-          top: "10%", left: "50%",
-          transformOrigin: "0 0",
-          animation: "orbPulse 6s ease-in-out infinite",
-          pointerEvents: "none",
-        }} />
-        <div style={{
-          position: "absolute", width: "500px", height: "500px", borderRadius: "50%", zIndex: 0,
-          background: "radial-gradient(circle, rgba(123,97,255,0.1) 0%, transparent 70%)",
-          top: "20%", left: "55%",
-          transformOrigin: "0 0",
-          animation: "orbPulse2 8s ease-in-out infinite",
-          pointerEvents: "none",
-        }} />
+        <div className="hero-grid" style={{ position: "absolute", inset: 0, zIndex: 0, backgroundImage: "linear-gradient(rgba(0,229,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.04) 1px,transparent 1px)", backgroundSize: "60px 60px", maskImage: "radial-gradient(ellipse 80% 60% at 50% 40%,black 20%,transparent 80%)", WebkitMaskImage: "radial-gradient(ellipse 80% 60% at 50% 40%,black 20%,transparent 80%)" }} />
+        <div className="scan-line" style={{ position: "absolute", left: 0, right: 0, height: "2px", zIndex: 1, background: "linear-gradient(90deg,transparent,rgba(0,229,255,0.6),transparent)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", width: "600px", height: "600px", borderRadius: "50%", zIndex: 0, background: "radial-gradient(circle,rgba(0,229,255,0.1) 0%,transparent 70%)", top: "10%", left: "50%", transformOrigin: "0 0", animation: "orbPulse 6s ease-in-out infinite", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", width: "500px", height: "500px", borderRadius: "50%", zIndex: 0, background: "radial-gradient(circle,rgba(123,97,255,0.1) 0%,transparent 70%)", top: "20%", left: "55%", transformOrigin: "0 0", animation: "orbPulse2 8s ease-in-out infinite", pointerEvents: "none" }} />
         <div style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div className="hero-badge" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: "rgba(0,229,255,0.06)", border: "1px solid rgba(0,229,255,0.18)", borderRadius: "6px", padding: "0.3rem 0.9rem", marginBottom: "2rem" }}>
             <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--cyan)", display: "inline-block", boxShadow: "0 0 6px var(--cyan)" }} />
             <span style={{ fontSize: "0.72rem", color: "var(--cyan)", fontFamily: "var(--mono)", letterSpacing: "0.08em" }}>MULTIMODAL CONFIDENCE ANALYSIS — NOW LIVE</span>
           </div>
-          <h1 className="hero-h1" style={{ fontSize: "clamp(3rem, 7vw, 6rem)", fontWeight: 800, lineHeight: 1.02, letterSpacing: "-0.04em", color: "var(--text)", maxWidth: "820px", marginBottom: "1.5rem" }}>
-            Ace your next<br />
-            <span style={{ color: "var(--cyan)", textShadow: "0 0 60px rgba(0,229,255,0.4)" }}>interview.</span>
+          <h1 className="hero-h1" style={{ fontSize: "clamp(3rem,7vw,6rem)", fontWeight: 800, lineHeight: 1.02, letterSpacing: "-0.04em", color: "var(--text)", maxWidth: "820px", marginBottom: "1.5rem" }}>
+            Ace your next<br /><span style={{ color: "var(--cyan)", textShadow: "0 0 60px rgba(0,229,255,0.4)" }}>interview.</span>
           </h1>
           <p className="hero-sub" style={{ fontSize: "1.1rem", color: "var(--muted)", maxWidth: "500px", lineHeight: 1.75, marginBottom: "2.5rem", fontFamily: "var(--mono)" }}>
             AI-powered mock interviews that analyze your voice, gaze, and body language in real-time — then coach you to close the gap.
@@ -383,9 +368,7 @@ export default function LandingPage() {
             <Link href="/upload" className="btn-primary">Start my interview →</Link>
             <span style={{ fontSize: "0.78rem", color: "var(--muted)", fontFamily: "var(--mono)" }}>No account needed</span>
           </div>
-          <div className="hero-mock" ref={heroMockRef} style={{ width: "100%", maxWidth: "900px" }}>
-            <MockUI />
-          </div>
+          <div className="hero-mock" ref={heroMockRef} style={{ width: "100%", maxWidth: "900px" }}><MockUI /></div>
         </div>
       </section>
 
@@ -417,10 +400,8 @@ export default function LandingPage() {
           </div>
           <div>
             <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>01 — Personalization</div>
-            <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.6rem)", fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: "1.25rem" }}>Instant personalised interviews</h2>
-            <p style={{ fontSize: "0.95rem", color: "var(--muted)", lineHeight: 1.8, marginBottom: "1.75rem", fontFamily: "var(--mono)" }}>
-              Upload your resume and paste any job description. AceIt generates a bespoke interviewer with tailored technical and behavioral questions — specific to the exact role.
-            </p>
+            <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.6rem)", fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: "1.25rem" }}>Instant personalised interviews</h2>
+            <p style={{ fontSize: "0.95rem", color: "var(--muted)", lineHeight: 1.8, marginBottom: "1.75rem", fontFamily: "var(--mono)" }}>Upload your resume and paste any job description. AceIt generates a bespoke interviewer with tailored technical and behavioral questions — specific to the exact role.</p>
             <Link href="/upload" className="btn-primary" style={{ fontSize: "0.85rem", padding: "0.65rem 1.25rem" }}>Try it now →</Link>
           </div>
         </div>
@@ -432,17 +413,15 @@ export default function LandingPage() {
           <div ref={feedbackRef.ref} className={`lp-reveal ${feedbackRef.visible ? "visible" : ""}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "5rem", alignItems: "center" }}>
             <div>
               <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>02 — Feedback</div>
-              <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.6rem)", fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: "1.25rem" }}>Get actionable, constructive feedback</h2>
-              <p style={{ fontSize: "0.95rem", color: "var(--muted)", lineHeight: 1.8, fontFamily: "var(--mono)" }}>
-                Every session produces a timestamped report that cross-references your transcript with biometric signals — so you know exactly when and why your confidence dipped.
-              </p>
+              <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.6rem)", fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: "1.25rem" }}>Get actionable, constructive feedback</h2>
+              <p style={{ fontSize: "0.95rem", color: "var(--muted)", lineHeight: 1.8, fontFamily: "var(--mono)" }}>Every session produces a timestamped report that cross-references your transcript with biometric signals — so you know exactly when and why your confidence dipped.</p>
             </div>
             <div style={{ background: "#080b12", borderRadius: "16px", padding: "2rem", border: "1px solid var(--border)" }}>
               <div style={{ fontSize: "0.62rem", fontFamily: "var(--mono)", color: "var(--muted)", marginBottom: "1.5rem", letterSpacing: "0.12em", textTransform: "uppercase" }}>Performance Breakdown</div>
-              <SkillBar label="Communication" value={87} color="var(--cyan)" visible={feedbackRef.visible} />
-              <SkillBar label="Confidence" value={74} color="var(--purple)" visible={feedbackRef.visible} />
-              <SkillBar label="Problem solving" value={91} color="var(--green)" visible={feedbackRef.visible} />
-              <SkillBar label="Technical ability" value={82} color="var(--cyan)" visible={feedbackRef.visible} />
+              <SkillBar label="Communication"    value={87} color="var(--cyan)"   visible={feedbackRef.visible} />
+              <SkillBar label="Confidence"       value={74} color="var(--purple)" visible={feedbackRef.visible} />
+              <SkillBar label="Problem solving"  value={91} color="var(--green)"  visible={feedbackRef.visible} />
+              <SkillBar label="Technical ability" value={82} color="var(--cyan)"  visible={feedbackRef.visible} />
             </div>
           </div>
         </div>
@@ -453,50 +432,33 @@ export default function LandingPage() {
         <div ref={featuresRef.ref} className={`lp-reveal ${featuresRef.visible ? "visible" : ""}`}>
           <div style={{ textAlign: "center", marginBottom: "4rem" }}>
             <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>03 — Features</div>
-            <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.6rem)", fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.03em", color: "var(--text)" }}>Practice makes perfect</h2>
+            <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.6rem)", fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.03em", color: "var(--text)" }}>Practice makes perfect</h2>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.25rem" }}>
-            <FeatureCard icon="/microphone.png" title="Voice chat" accent="var(--cyan)" desc="Speak naturally with an AI interviewer powered by GPT-4o and ElevenLabs — sub-500ms response time, no typing required." />
-            <FeatureCard icon="/robot.png" title="Powerful interviewer" accent="var(--purple)" desc="Your resume and job description shape a bespoke interviewer that asks questions specific to your experience and the role." />
-            <FeatureCard icon="/bar-chart.png" title="Constructive feedback" accent="var(--green)" desc="Timestamped coaching tied to the exact moment you looked away, rushed your words, or showed stress in your posture." />
-            <FeatureCard icon="/chart.png" title="Get better" accent="var(--pink)" desc="Track gaze stability, voice confidence, and composure across sessions and watch your scores improve over time." />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "1.25rem" }}>
+            <FeatureCard icon="/microphone.png" title="Voice chat"            accent="var(--cyan)"   desc="Speak naturally with an AI interviewer powered by GPT-4o and ElevenLabs — sub-500ms response time, no typing required." />
+            <FeatureCard icon="/robot.png"      title="Powerful interviewer"  accent="var(--purple)" desc="Your resume and job description shape a bespoke interviewer that asks questions specific to your experience and the role." />
+            <FeatureCard icon="/bar-chart.png"  title="Constructive feedback" accent="var(--green)"  desc="Timestamped coaching tied to the exact moment you looked away, rushed your words, or showed stress in your posture." />
+            <FeatureCard icon="/chart.png"      title="Get better"            accent="var(--pink)"   desc="Track gaze stability, voice confidence, and composure across sessions and watch your scores improve over time." />
           </div>
         </div>
       </section>
 
-      {/* ── TESTIMONIALS ── */}
-      <section style={{ padding: "8rem 0", background: "var(--surface)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", overflow: "hidden" }}>
-        <div ref={testimonialsRef.ref} className={`lp-reveal ${testimonialsRef.visible ? "visible" : ""}`}>
-          <div style={{ textAlign: "center", marginBottom: "3rem", padding: "0 2rem" }}>
-            <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>04 — Reviews</div>
-            <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.6rem)", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)" }}>What people are saying</h2>
-          </div>
-          <div style={{ display: "flex", gap: "1.25rem", padding: "0 2rem", overflowX: "auto", paddingBottom: "1rem" }}>
-            <TestimonialCard initial="S" name="Suchith M." role="ECE Student → NVIDIA Intern" accent="var(--cyan)" text="The gaze feedback was eye-opening. I didn't realize I look away when I'm thinking — now I consciously anchor my eyes and it makes a huge difference." />
-            <TestimonialCard initial="J" name="Jacob B." role="Career Switcher → SWE at Stripe" accent="var(--purple)" text="Being able to click on a stress spike and immediately hear what I was saying at that moment is genuinely brilliant." />
-            <TestimonialCard initial="C" name="Cooper B." role="CS Student" accent="var(--green)" text="I went in cold for my first interview and bombed it. After three sessions with AceIt my confidence scores jumped from 54 to 83." />
-            <TestimonialCard initial="D" name="Darquavius Shingledingus III" role="Masters Student → Meta" accent="var(--pink)" text="The AI interviewer asked me things I didn't expect — it had clearly read my resume carefully. Much harder than the real interview, honestly." />
-          </div>
-        </div>
-      </section>
+      {/* ── 3D TESTIMONIALS CLOUD ── */}
+      <TestimonialsCloud />
 
       {/* ── TEAM ── */}
       <section id="team" style={{ padding: "10rem 2rem", maxWidth: "1100px", margin: "0 auto" }}>
         <div ref={teamRef.ref} className={`lp-reveal ${teamRef.visible ? "visible" : ""}`}>
           <div style={{ textAlign: "center", marginBottom: "4rem" }}>
             <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>05 — Team</div>
-            <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.6rem)", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: "1rem" }}>
-              Built by engineers,<br />for candidates.
-            </h2>
-            <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontFamily: "var(--mono)", maxWidth: "480px", margin: "0 auto", lineHeight: 1.75 }}>
-              Four people. One hackathon. A shared belief that interview prep should be as sophisticated as the interviews themselves.
-            </p>
+            <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.6rem)", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: "1rem" }}>Built by engineers,<br />for candidates.</h2>
+            <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontFamily: "var(--mono)", maxWidth: "480px", margin: "0 auto", lineHeight: 1.75 }}>Four people. One hackathon. A shared belief that interview prep should be as sophisticated as the interviews themselves.</p>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.25rem" }}>
-            <TeamCard name="Konrád" imageSrc="/konrad.png" title="Systems & Frontend Architect" accent="var(--cyan)" domain="Builds the infrastructure that holds everything together — WebRTC signaling, global state orchestration, and the synchronized analytics dashboard." skills={["Next.js", "WebRTC", "Zustand", "Recharts", "Supabase"]} />
-            <TeamCard name="Jason" imageSrc="/jason.png" title="Audio & Intelligence Orchestrator" accent="var(--purple)" domain="Runs the conversational brain — RAG ingestion, cascading GPT-4o streams, ElevenLabs voice synthesis, and Whisper word-level timestamps." skills={["FastAPI", "GPT-4o", "Whisper", "ElevenLabs", "LangChain"]} />
-            <TeamCard name="Mitch" imageSrc="/mitch.png" title="Computer Vision Engineer" accent="var(--green)" domain="Extracts meaning from 468 facial landmarks in real time — gaze vectors, head pose, and fidget index — streamed live via WebRTC DataChannels." skills={["MediaPipe", "OpenCV", "Flask", "PyTorch", "NumPy"]} />
-            <TeamCard name="Rocky" imageSrc="/rocky.png" title="Business Lead" accent="var(--pink)" domain="Keeps the team pointed at what matters — market positioning, pitch deck, user testimonials, and making sure the demo lands with the judges." skills={["Strategy", "Pitch Deck", "User Research", "Data"]} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "1.25rem" }}>
+            <TeamCard name="Konrád" imageSrc="/konrad.png" title="Systems & Frontend Architect"      accent="var(--cyan)"   domain="Builds the infrastructure that holds everything together — WebRTC signaling, global state orchestration, and the synchronized analytics dashboard." skills={["Next.js","WebRTC","Zustand","Recharts","Supabase"]} />
+            <TeamCard name="Jason"  imageSrc="/jason.png"  title="Audio & Intelligence Orchestrator" accent="var(--purple)" domain="Runs the conversational brain — RAG ingestion, cascading GPT-4o streams, ElevenLabs voice synthesis, and Whisper word-level timestamps."       skills={["FastAPI","GPT-4o","Whisper","ElevenLabs","LangChain"]} />
+            <TeamCard name="Mitch"  imageSrc="/mitch.png"  title="Computer Vision Engineer"          accent="var(--green)"  domain="Extracts meaning from 468 facial landmarks in real time — gaze vectors, head pose, and fidget index — streamed live via WebRTC DataChannels."  skills={["MediaPipe","OpenCV","Flask","PyTorch","NumPy"]} />
+            <TeamCard name="Rocky"  imageSrc="/rocky.png"  title="Business Lead"                     accent="var(--pink)"   domain="Keeps the team pointed at what matters — market positioning, pitch deck, user testimonials, and making sure the demo lands with the judges."    skills={["Strategy","Pitch Deck","User Research","Data"]} />
           </div>
         </div>
       </section>
@@ -507,13 +469,13 @@ export default function LandingPage() {
           <div ref={faqRef.ref} className={`lp-reveal ${faqRef.visible ? "visible" : ""}`}>
             <div style={{ textAlign: "center", marginBottom: "3rem" }}>
               <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>06 — FAQ</div>
-              <h2 style={{ fontSize: "clamp(1.8rem, 3vw, 2.6rem)", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)" }}>Common questions</h2>
+              <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.6rem)", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text)" }}>Common questions</h2>
             </div>
             <FaqItem q="How does the AI analyze my body language?" a="AceIt runs MediaPipe facial landmark detection in your browser at 30fps, tracking 468 3D points to derive gaze direction, head pose, and fidget index — all processed locally with no video leaving your device." />
-            <FaqItem q="What kind of questions will I be asked?" a="Questions are generated by GPT-4o based on your specific resume and job posting. Expect a mix of behavioral (STAR-format) and technical questions tailored to the role and your experience level." />
-            <FaqItem q="Is my video or audio stored?" a="No. All biometric processing happens in your browser. Only anonymized metric scores (gaze, confidence, fidget index) are stored in your session — never raw video or audio." />
-            <FaqItem q="How long is a typical session?" a="Most sessions run 10–20 minutes. You control when to end the interview, and your report is generated immediately after." />
-            <FaqItem q="Do I need to install anything?" a="No. AceIt runs entirely in your browser. You just need a webcam and microphone." />
+            <FaqItem q="What kind of questions will I be asked?"   a="Questions are generated by GPT-4o based on your specific resume and job posting. Expect a mix of behavioral (STAR-format) and technical questions tailored to the role and your experience level." />
+            <FaqItem q="Is my video or audio stored?"             a="No. All biometric processing happens in your browser. Only anonymized metric scores (gaze, confidence, fidget index) are stored in your session — never raw video or audio." />
+            <FaqItem q="How long is a typical session?"           a="Most sessions run 10–20 minutes. You control when to end the interview, and your report is generated immediately after." />
+            <FaqItem q="Do I need to install anything?"           a="No. AceIt runs entirely in your browser. You just need a webcam and microphone." />
           </div>
         </div>
       </section>
@@ -522,9 +484,7 @@ export default function LandingPage() {
       <section style={{ background: "var(--bg)", padding: "10rem 2rem", textAlign: "center" }}>
         <div ref={ctaRef.ref} className={`lp-reveal ${ctaRef.visible ? "visible" : ""}`}>
           <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1.5rem" }}>◆ Ready when you are</div>
-          <h2 style={{ fontSize: "clamp(2.5rem, 5vw, 4.5rem)", fontWeight: 800, letterSpacing: "-0.04em", color: "var(--text)", marginBottom: "1rem", lineHeight: 1.05, textShadow: "0 0 80px rgba(0,229,255,0.15)" }}>
-            Get the job of<br />your dreams.
-          </h2>
+          <h2 style={{ fontSize: "clamp(2.5rem,5vw,4.5rem)", fontWeight: 800, letterSpacing: "-0.04em", color: "var(--text)", marginBottom: "1rem", lineHeight: 1.05, textShadow: "0 0 80px rgba(0,229,255,0.15)" }}>Get the job of<br />your dreams.</h2>
           <p style={{ fontSize: "1rem", color: "var(--muted)", marginBottom: "2.5rem", fontFamily: "var(--mono)" }}>No fluff. No filler. Just better interviews.</p>
           <Link href="/upload" className="btn-primary" style={{ fontSize: "1rem", padding: "1rem 2.5rem" }}>Start for free →</Link>
         </div>
