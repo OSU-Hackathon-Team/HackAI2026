@@ -286,6 +286,12 @@ onJump={jumpToTime}
 <button onClick={handleExport} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text)", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.85rem", padding: "0.75rem 1.5rem", borderRadius: "8px", cursor: "pointer", letterSpacing: "0.05em" }}>
             Export Report
 </button>
+<button onClick={() => router.push("/dashboard")} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--muted)", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "0.85rem", padding: "0.75rem 1.5rem", borderRadius: "8px", cursor: "pointer", letterSpacing: "0.05em", transition: "all 0.15s ease" }}
+  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--accent)"; (e.currentTarget as HTMLElement).style.color = "var(--accent)"; }}
+  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--muted)"; }}
+>
+            ← Back to Dashboard
+</button>
 </div>
 </div>
 </div>
