@@ -130,7 +130,7 @@ function SessionCard({ session, index }: { session: typeof MOCK_SESSIONS[0]; ind
       {/* Footer */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <Link
-          href={`/report`}
+          href={`/report?session_id=${session.id}`}
           style={{ fontSize: "0.75rem", fontFamily: "DM Mono, monospace", color: "#5a6a82", textDecoration: "none", display: "flex", alignItems: "center", gap: "0.3rem", transition: "color 0.15s ease" }}
           onMouseEnter={e => (e.currentTarget.style.color = "#00e5ff")}
           onMouseLeave={e => (e.currentTarget.style.color = "#5a6a82")}
@@ -152,13 +152,38 @@ function StatPill({ label, value, color }: { label: string; value: string; color
 }
 
 export default function DashboardPage() {
-  const { user } = useUser();
+  const { user, isLoaded: isUserLoaded } = useUser();
   const [mounted, setMounted] = useState(false);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => { setMounted(true); }, []);
 
-  const avgScore = Math.round(MOCK_SESSIONS.reduce((s, r) => s + r.score, 0) / MOCK_SESSIONS.length);
-  const bestScore = Math.max(...MOCK_SESSIONS.map(r => r.score));
-  const totalSessions = MOCK_SESSIONS.length;
+  useEffect(() => {
+    if (user?.id) {
+      fetch(`http://127.0.0.1:8080/api/get-sessions?user_id=${user.id}`)
+        .then(res => res.json())
+        .then(data => {
+          setSessions(data.data || []);
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error("Error fetching sessions:", err);
+          setLoading(false);
+        });
+    } else if (isUserLoaded && !user) {
+      setLoading(false);
+    }
+  }, [user, isUserLoaded]);
+
+  const displaySessions = sessions.length > 0 ? sessions : [];
+  const avgScore = displaySessions.length > 0 ? Math.round(displaySessions.reduce((s, r) => s + r.score, 0) / displaySessions.length) : 0;
+  const bestScore = displaySessions.length > 0 ? Math.max(...displaySessions.map(r => r.score)) : 0;
+  const totalSessions = displaySessions.length;
+
+  const avgGaze = displaySessions.length > 0 ? Math.round(displaySessions.reduce((s, r) => s + r.gaze, 0) / displaySessions.length) : 0;
+  const avgConf = displaySessions.length > 0 ? Math.round(displaySessions.reduce((s, r) => s + r.confidence, 0) / displaySessions.length) : 0;
+  const avgCalm = displaySessions.length > 0 ? Math.round(displaySessions.reduce((s, r) => s + r.composure, 0) / displaySessions.length) : 0;
 
   const firstName = user?.firstName ?? "there";
 
@@ -257,10 +282,10 @@ export default function DashboardPage() {
 
         {/* ── STATS ROW ── */}
         <div className="fade-up" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "3rem", animationDelay: "0.1s" }}>
-          <StatPill label="Sessions" value={`${totalSessions}`} color="var(--cyan)" />
-          <StatPill label="Avg Score" value={`${avgScore}`} color="var(--purple)" />
-          <StatPill label="Best Score" value={`${bestScore}`} color="var(--green)" />
-          <StatPill label="Trend" value="↑ +21" color="var(--green)" />
+          <StatPill label="Avg Performance" value={`${avgScore}%`} color="var(--cyan)" />
+          <StatPill label="Lifetime Gaze" value={`${avgGaze}%`} color="var(--cyan)" />
+          <StatPill label="Lifetime Conf" value={`${avgConf}%`} color="var(--purple)" />
+          <StatPill label="Lifetime Calm" value={`${avgCalm}%`} color="var(--green)" />
         </div>
 
         {/* ── START NEW CTA ── */}
@@ -297,7 +322,13 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {MOCK_SESSIONS.length === 0 ? (
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "5rem 2rem" }}>
+              <div style={{ fontSize: "0.85rem", color: "#5a6a82", fontFamily: "DM Mono, monospace" }}>
+                Loading your sessions...
+              </div>
+            </div>
+          ) : displaySessions.length === 0 ? (
             <div style={{ textAlign: "center", padding: "5rem 2rem", border: "1px dashed #1e2a3a", borderRadius: "16px" }}>
               <div style={{ fontSize: "0.85rem", color: "#5a6a82", fontFamily: "DM Mono, monospace" }}>
                 No sessions yet — start your first interview above.
@@ -305,7 +336,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {MOCK_SESSIONS.map((session, i) => (
+              {displaySessions.map((session, i) => (
                 <SessionCard key={session.id} session={session} index={i} />
               ))}
             </div>

@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton, useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
 function useScrollReveal() {
   const ref = useRef<HTMLDivElement>(null);
@@ -273,8 +274,16 @@ function TestimonialsCloud() {
   );
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function LandingPage() {
+  const { user, isLoaded } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoaded && user) {
+      router.push("/dashboard");
+    }
+  }, [user, isLoaded, router]);
+
   const personalizedRef = useScrollReveal();
   const feedbackRef = useScrollReveal();
   const featuresRef = useScrollReveal();

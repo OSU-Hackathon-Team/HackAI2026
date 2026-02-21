@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useAuth, useClerk, useUser } from "@clerk/nextjs";
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer, Area
@@ -81,10 +81,8 @@ function TranscriptRow({ entry, isStressZone, onJump }: {
 // ─── COACHING ICON ────────────────────────────────────────────────────────────
 function CoachingIcon({ src, alt, color }: { src: string; alt: string; color: string }) {
   return (
-    <div style={{ width: "22px", height: "22px", flexShrink: 0 }}>
-      <div style={{ width: "100%", height: "100%", borderRadius: "4px", background: `${color}20`, border: `1px solid ${color}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px" }}>
-        💡
-      </div>
+    <div style={{ width: "24px", height: "24px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: `${color}15`, borderRadius: "6px", border: `1px solid ${color}30` }}>
+      <img src={src} alt={alt} style={{ width: "14px", height: "14px", objectFit: "contain", filter: "brightness(1.2)" }} />
     </div>
   );
 }
@@ -182,20 +180,41 @@ export default function ReportPage() {
   const { biometrics = [], transcript = [], sessionId, reset } = useInterviewStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [activeTimestamp, setActiveTimestamp] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const urlSessionId = searchParams?.get("session_id");
+  const autoSave = searchParams?.get("auto_save");
+  const [sessionDetails, setSessionDetails] = useState<any>(null);
 
-  // Use real store data if available, fall back to mock
-  const data = (biometrics && biometrics.length > 0) ? biometrics : MOCK_BIOMETRICS;
-  const txData = (transcript && transcript.length > 0) ? transcript : MOCK_TRANSCRIPT;
-  const session = MOCK_SESSION;
+  const { user, isLoaded: isUserLoaded } = useUser();
+
+  // Load session from URL if provided (for viewing past sessions)
+  useEffect(() => {
+    if (urlSessionId) {
+      fetch(`http://127.0.0.1:8080/api/get-session-details?session_id=${urlSessionId}`)
+        .then(res => res.json())
+        .then(data => setSessionDetails(data.data))
+        .catch(err => console.error("Error loading session:", err));
+    }
+  }, [urlSessionId]);
+
+  // Use real store data if available, or sessionDetails, or fallback to mock
+  const data = sessionDetails?.biometrics || ((biometrics && biometrics.length > 0) ? biometrics : MOCK_BIOMETRICS);
+  const txData = sessionDetails?.transcript || ((transcript && transcript.length > 0) ? transcript : MOCK_TRANSCRIPT);
+  const session = sessionDetails ? {
+    role: sessionDetails.role,
+    company: sessionDetails.company,
+    date: sessionDetails.date
+  } : MOCK_SESSION;
 
   // Compute averages safely
   const safeData = data || [];
-  const avgGaze = safeData.length > 0 ? Math.round(safeData.reduce((s, d) => s + (d.gazeScore || 0), 0) / safeData.length) : 0;
-  const avgConf = safeData.length > 0 ? Math.round(safeData.reduce((s, d) => s + (d.confidence || 0), 0) / safeData.length) : 0;
-  const avgCalm = safeData.length > 0 ? Math.round(100 - (safeData.reduce((s, d) => s + (d.fidgetIndex || 0), 0) / safeData.length)) : 100;
+  const avgGaze = safeData.length > 0 ? Math.round(safeData.reduce((s: number, d: any) => s + (d.gazeScore || 0), 0) / safeData.length) : 0;
+  const avgConf = safeData.length > 0 ? Math.round(safeData.reduce((s: number, d: any) => s + (d.confidence || 0), 0) / safeData.length) : 0;
+  const avgCalm = safeData.length > 0 ? Math.round(100 - (safeData.reduce((s: number, d: any) => s + (d.fidgetIndex || 0), 0) / safeData.length)) : 100;
   const overall = Math.round((avgGaze + avgConf + avgCalm) / 3);
-  const spikeCount = safeData.filter((d) => d.stressSpike).length;
-  const spikeTimestamps = new Set(safeData.filter((d) => d.stressSpike).map((d) => d.time));
+  const spikeCount = safeData.filter((d: any) => d.stressSpike).length;
+  const spikeTimestamps = new Set(safeData.filter((d: any) => d.stressSpike).map((d: any) => d.time));
 
   // ── Jump to timestamp in video ──
   const jumpToTime = (time: number) => {
@@ -218,14 +237,62 @@ export default function ReportPage() {
     }
   };
 
-  const handleReset = () => requireAuth(() => {
+  const handleReset = () => {
     reset();
     router.push("/interviewer-selection");
-  });
+  };
 
-  const handleExport = () => requireAuth(() => {
+  const handleExport = () => {
     window.print();
-  });
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      openSignIn({ afterSignInUrl: "/report?auto_save=true" });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const payload = {
+        user_id: user.id,
+        role: session.role,
+        company: session.company,
+        date: session.date,
+        duration: "Demo Duration", // Could be calculated
+        score: overall,
+        gaze: avgGaze,
+        confidence: avgConf,
+        composure: avgCalm,
+        spikes: spikeCount,
+        transcript: txData,
+        biometrics: data
+      };
+
+      const res = await fetch("http://127.0.0.1:8080/api/save-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        router.push("/dashboard");
+      } else {
+        alert("Failed to save session.");
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Auto-save logic after login redirect
+  useEffect(() => {
+    if (autoSave === "true" && user && isUserLoaded && !isSaving && biometrics.length > 0) {
+      handleSave();
+    }
+  }, [user, isUserLoaded, autoSave]);
 
   // Determine score color
   const scoreColor = overall >= 80 ? "var(--success)" : overall >= 60 ? "var(--accent)" : "var(--danger)";
@@ -272,8 +339,8 @@ export default function ReportPage() {
           <div className="card" style={{ padding: "1.5rem" }}>
             <div className="label" style={{ marginBottom: "1.25rem" }}>SESSION TRANSCRIPT</div>
             <div style={{ maxHeight: "500px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-              {txData.map((entry, i) => {
-                const entryStress = [...spikeTimestamps].some(t => Math.abs(t - entry.time) < 8);
+              {txData.map((entry: any, i: number) => {
+                const entryStress = [...spikeTimestamps].some((t: any) => Math.abs(t - entry.time) < 8);
                 return (
                   <TranscriptRow
                     key={i}
@@ -309,8 +376,20 @@ export default function ReportPage() {
 
         {/* ── FOOTER ACTIONS ── */}
         <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
-          <button className="btn-primary" onClick={handleReset}>↺ New Interview</button>
-          <button className="btn-ghost" onClick={handleExport}>Export Report</button>
+          <button className="btn-ghost" onClick={handleReset} style={{ color: "var(--text)", borderColor: "var(--border)" }}>↺ New Interview</button>
+          {!urlSessionId && (
+            <button
+              className="btn-primary"
+              onClick={handleSave}
+              disabled={isSaving}
+              style={{ background: "#00e096", boxShadow: "0 0 20px rgba(0, 224, 150, 0.25)", color: "var(--bg)" }}
+            >
+              {isSaving ? "Saving..." : "Save to Dashboard"}
+            </button>
+          )}
+          <button className="btn-ghost" onClick={handleExport} style={{ fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>
+            <span style={{ marginRight: "0.5rem" }}>📄</span> Export PDF
+          </button>
         </div>
       </div>
     </div>

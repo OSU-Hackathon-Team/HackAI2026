@@ -103,7 +103,10 @@ function CameraPanel({
   isProcessing,
   isSpeaking,
   onStartRecording,
-  onStopRecording
+  onStopRecording,
+  onStartInterview,
+  isReady,
+  countdown
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   cameraOn: boolean;
@@ -115,6 +118,9 @@ function CameraPanel({
   isSpeaking: boolean;
   onStartRecording: () => void;
   onStopRecording: () => void;
+  onStartInterview: () => void;
+  isReady: boolean;
+  countdown: number | null;
 }) {
   return (
     <div style={{ position: "relative", width: "100%", flex: 1, background: "#000", overflow: "hidden" }}>
@@ -126,7 +132,41 @@ function CameraPanel({
         style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)", display: "block", opacity: cameraOn ? 1 : 0, transition: "opacity 0.3s ease" }}
       />
 
-      {cameraOn && (
+      {cameraOn && !isReady && countdown === null && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", gap: "1rem" }}>
+          {(!cameraOn || !micOn) ? (
+            <div style={{ background: "rgba(8,11,18,0.8)", padding: "0.75rem 1.25rem", borderRadius: "12px", border: "1px solid var(--accent)", color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "0.8rem", pointerEvents: "auto", textAlign: "center", backdropFilter: "blur(4px)" }}>
+              AI: "Please turn on your camera and microphone to begin."
+            </div>
+          ) : (
+            <button
+              onClick={onStartInterview}
+              style={{
+                pointerEvents: "auto",
+                padding: "1rem 2rem",
+                borderRadius: "99px",
+                border: "none",
+                background: "var(--success)",
+                color: "#080b12",
+                fontWeight: 800,
+                fontSize: "1rem",
+                fontFamily: "var(--font-mono)",
+                cursor: "pointer",
+                boxShadow: "0 0 40px rgba(0,224,150,0.4)",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.6rem",
+                transition: "all 0.3s ease",
+                transform: "scale(1.05)",
+              }}
+            >
+              READY TO START?
+            </button>
+          )}
+        </div>
+      )}
+
+      {cameraOn && isReady && (
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
           <button
             onClick={isRecording ? onStopRecording : onStartRecording}
@@ -204,7 +244,7 @@ function CountdownOverlay({ countdown }: { countdown: number }) {
       )}
       {!isGoodLuck && (
         <div style={{ width: "200px", height: "3px", background: "rgba(0,229,255,0.15)", borderRadius: "99px", overflow: "hidden", marginTop: "0.5rem" }}>
-          <div style={{ height: "100%", background: "var(--accent)", borderRadius: "99px", width: `${((10 - countdown) / 10) * 100}%`, transition: "width 0.9s linear", boxShadow: "0 0 8px rgba(0,229,255,0.6)" }} />
+          <div style={{ height: "100%", background: "var(--accent)", borderRadius: "99px", width: `${((3 - countdown) / 3) * 100}%`, transition: "width 0.9s linear", boxShadow: "0 0 8px rgba(0,229,255,0.6)" }} />
         </div>
       )}
       <style>{`@keyframes countPop { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
@@ -290,6 +330,7 @@ export default function InterviewPage() {
   const [connStatus, setConnStatus] = useState<"connecting" | "connected" | "failed" | "mock">("connecting");
   const [cameraOn, setCameraOn] = useState(false);
   const [micOn, setMicOn] = useState(false);
+  const [hasUserConfirmedReady, setHasUserConfirmedReady] = useState(false);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -520,13 +561,31 @@ export default function InterviewPage() {
   };
 
 
-  // ── Start timer + interview when camera or mic first turns on ─────────────
+  // ── Start timer + interview when user is ready ─────────────
+  const handleStartInterviewCountdown = () => {
+    if (countdown !== null) return;
+    setCountdown(3);
+    let current = 3;
+    const ticker = setInterval(() => {
+      current -= 1;
+      setCountdown(current);
+      if (current <= 0) {
+        clearInterval(ticker);
+        setTimeout(() => setCountdown(null), 1500);
+
+        // Actually start the interview
+        if (interviewStartedRef.current) return;
+        interviewStartedRef.current = true;
+        startInterview();
+        setIsReady(true);
+        startWebRTC();
+      }
+    }, 1000);
+  };
+
   const maybeStartInterview = () => {
-    if (interviewStartedRef.current) return;
-    interviewStartedRef.current = true;
-    startInterview();
-    setIsReady(true);
-    startWebRTC();
+    // This now just tracks if we HAVE the stream available
+    // but we don't start the interview until handleStartInterviewCountdown is called
   };
 
   // ── Toggle camera ─────────────────────────────────────────────────────────
@@ -673,21 +732,9 @@ export default function InterviewPage() {
     }
   };
 
-  // ── Countdown (visual only — timer starts on first device toggle) ─────────
+  // ── Countdown logic is now handled by handleStartInterviewCountdown ─────────
   useEffect(() => {
-    if (phase !== "connecting") return;
-    setCountdown(10);
-    let current = 10;
-    const ticker = setInterval(() => {
-      current -= 1;
-      setCountdown(current);
-      if (current <= 0) {
-        clearInterval(ticker);
-        setTimeout(() => setCountdown(null), 1500);
-        // Note: interview/timer does NOT start here — waits for camera/mic toggle
-      }
-    }, 1000);
-    return () => clearInterval(ticker);
+    // Removed automatic countdown on phase change
   }, [phase]);
 
   useEffect(() => { if (phase === "live") setIsReady(true); }, [phase]);
@@ -696,6 +743,27 @@ export default function InterviewPage() {
   useEffect(() => {
     if (!isReady) return;
     const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+
+    // Speak the first question if it exists in the transcript
+    if (transcript.length > 0 && transcript[0].speaker === "interviewer") {
+      const firstText = transcript[0].text;
+      if (firstText) {
+        if (!audioQueueRef.current) {
+          audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false));
+        }
+        setIsSpeaking(true);
+        fetch('http://127.0.0.1:8080/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: firstText }),
+        }).then(r => r.blob()).then(blob => {
+          if (audioQueueRef.current) {
+            audioQueueRef.current.add(URL.createObjectURL(blob));
+          }
+        });
+      }
+    }
+
     return () => clearInterval(interval);
   }, [isReady]);
 
@@ -778,6 +846,9 @@ export default function InterviewPage() {
               isSpeaking={isSpeaking}
               onStartRecording={startRecording}
               onStopRecording={stopRecording}
+              onStartInterview={handleStartInterviewCountdown}
+              isReady={isReady}
+              countdown={countdown}
             />
           </div>
 
