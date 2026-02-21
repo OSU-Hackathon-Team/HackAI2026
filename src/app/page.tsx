@@ -339,7 +339,7 @@ export default function LandingPage() {
             <SignUpButton mode="modal"><button className="btn-primary">Start free →</button></SignUpButton>
           </SignedOut>
           <SignedIn>
-            <Link href="/upload" className="btn-primary">Start interview →</Link>
+            <Link href="/interviewer-selection" className="btn-primary">Start interview →</Link>
             <UserButton afterSignOutUrl="/" />
           </SignedIn>
         </div>
@@ -363,7 +363,7 @@ export default function LandingPage() {
             AI-powered mock interviews that analyze your voice, gaze, and body language in real-time — then coach you to close the gap.
           </p>
           <div className="hero-cta" style={{ display: "flex", gap: "1rem", alignItems: "center", marginBottom: "5rem" }}>
-            <Link href="/upload" className="btn-primary">Start my interview →</Link>
+            <Link href="/interviewer-selection" className="btn-primary">Start my interview →</Link>
             <span style={{ fontSize: "0.78rem", color: "var(--muted)", fontFamily: "var(--mono)" }}>No account needed</span>
           </div>
           <div className="hero-mock" ref={heroMockRef} style={{ width: "100%", maxWidth: "900px" }}><MockUI /></div>
@@ -400,7 +400,7 @@ export default function LandingPage() {
             <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1rem" }}>01 — Personalization</div>
             <h2 style={{ fontSize: "clamp(1.8rem,3vw,2.6rem)", fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.03em", color: "var(--text)", marginBottom: "1.25rem" }}>Instant personalised interviews</h2>
             <p style={{ fontSize: "0.95rem", color: "var(--muted)", lineHeight: 1.8, marginBottom: "1.75rem", fontFamily: "var(--mono)" }}>Upload your resume and paste any job description. AceIt generates a bespoke interviewer with tailored technical and behavioral questions — specific to the exact role.</p>
-            <Link href="/upload" className="btn-primary" style={{ fontSize: "0.85rem", padding: "0.65rem 1.25rem" }}>Try it now →</Link>
+            <Link href="/interviewer-selection" className="btn-primary" style={{ fontSize: "0.85rem", padding: "0.65rem 1.25rem" }}>Try it now →</Link>
           </div>
         </div>
       </section>
@@ -484,7 +484,7 @@ export default function LandingPage() {
           <div style={{ fontSize: "0.65rem", fontFamily: "var(--mono)", color: "var(--cyan)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "1.5rem" }}>◆ Ready when you are</div>
           <h2 style={{ fontSize: "clamp(2.5rem,5vw,4.5rem)", fontWeight: 800, letterSpacing: "-0.04em", color: "var(--text)", marginBottom: "1rem", lineHeight: 1.05, textShadow: "0 0 80px rgba(0,229,255,0.15)" }}>Get the job of<br />your dreams.</h2>
           <p style={{ fontSize: "1rem", color: "var(--muted)", marginBottom: "2.5rem", fontFamily: "var(--mono)" }}>No fluff. No filler. Just better interviews.</p>
-          <Link href="/upload" className="btn-primary" style={{ fontSize: "1rem", padding: "1rem 2.5rem" }}>Start for free →</Link>
+          <Link href="/interviewer-selection" className="btn-primary" style={{ fontSize: "1rem", padding: "1rem 2.5rem" }}>Start for free →</Link>
         </div>
       </section>
 
@@ -496,7 +496,7 @@ export default function LandingPage() {
             <a href="#features" className="nav-link">Features</a>
             <a href="#team" className="nav-link">Team</a>
             <a href="#faq" className="nav-link">FAQ</a>
-            <Link href="/upload" className="nav-link">Start interview</Link>
+            <Link href="/interviewer-selection" className="nav-link">Start interview</Link>
           </div>
           <div style={{ fontSize: "0.72rem", color: "var(--muted)", fontFamily: "var(--mono)" }}>© 2026 AceIt · Built for good interviews</div>
         </div>

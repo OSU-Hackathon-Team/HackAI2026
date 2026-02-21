@@ -220,7 +220,7 @@ export default function ReportPage() {
 
   const handleReset = () => requireAuth(() => {
     reset();
-    router.push("/upload");
+    router.push("/interviewer-selection");
   });
 
   const handleExport = () => requireAuth(() => {

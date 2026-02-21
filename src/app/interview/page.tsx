@@ -238,7 +238,7 @@ export default function InterviewPage() {
     transcript, addTranscriptEntry, addBiometricPoint,
     liveAlert, setLiveAlert,
     startInterview,
-    sessionId, resumeText, jobText
+    sessionId, resumeText, jobText, interviewerPersona
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -303,7 +303,8 @@ export default function InterviewPage() {
             session_id: sessionId,
             metrics: streamData.metrics,
             resume_text: resumeText,
-            job_text: jobText
+            job_text: jobText,
+            interviewer_persona: interviewerPersona
           }),
         });
         const chatData = await chatRes.json();
