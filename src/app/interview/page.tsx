@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
-import { MOCK_LIVE_ALERTS, MOCK_TRANSCRIPT, MOCK_BIOMETRICS } from "@/lib/mockData";
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 function CameraIcon({ off }: { off: boolean }) {
@@ -257,8 +256,8 @@ function ConnectionBadge({ status }: { status: "connecting" | "connected" | "fai
   const config = {
     connecting: { color: "#febc2e", label: "CONNECTING TO BACKEND" },
     connected: { color: "var(--success)", label: "BACKEND CONNECTED" },
-    failed: { color: "var(--danger)", label: "USING MOCK DATA" },
-    mock: { color: "var(--muted)", label: "MOCK MODE" },
+    failed: { color: "var(--danger)", label: "CONNECTION FAILED" },
+    mock: { color: "var(--muted)", label: "OFFLINE" },
   }[status];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
@@ -786,7 +785,10 @@ export default function InterviewPage() {
     dcRef.current?.close();
     pcRef.current?.close();
     finishInterview();
-    setTimeout(() => { setPhase("report"); router.push("/report"); }, 2000);
+    setTimeout(() => {
+      setPhase("report");
+      router.push(`/report?session_id=${sessionId}`);
+    }, 2000);
   };
 
   const formatTime = (s: number) => {

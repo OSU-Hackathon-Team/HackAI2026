@@ -20,3 +20,47 @@ INFO:__main__:PeerConnection(1fc02e76-b9e2-4979-9aa6-a0eef1188f86) Track audio r
 INFO:__main__:PeerConnection(1fc02e76-b9e2-4979-9aa6-a0eef1188f86) Connection state is connecting
 INFO:httpx:HTTP Request: POST https://pkbzwdspwkgcikahxfcj.supabase.co/rest/v1/interview_sessions "HTTP/2 404 Not Found"
 ERROR:__main__:Save session error: {'message': "Could not find the table 'public.interview_sessions' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.interview_reports'", 'details': None}
+WARNING:pypdf._reader:Ignoring wrong pointing object 8 0 (offset 0)
+WARNING:pypdf._reader:Ignoring wrong pointing object 21 0 (offset 0)
+WARNING:pypdf._reader:Ignoring wrong pointing object 42 0 (offset 0)
+WARNING:pypdf._reader:Ignoring wrong pointing object 67 0 (offset 0)
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/audio/speech "HTTP/1.1 200 OK"
+INFO:__main__:PeerConnection(b5faddb1-8d5e-43a8-87a2-c99c523ccce1) Created for 127.0.0.1
+INFO:__main__:PeerConnection(b5faddb1-8d5e-43a8-87a2-c99c523ccce1) Track audio received
+INFO:__main__:PeerConnection(b5faddb1-8d5e-43a8-87a2-c99c523ccce1) Track video received
+INFO:__main__:PeerConnection(b5faddb1-8d5e-43a8-87a2-c99c523ccce1) Connection state is connecting
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/audio/transcriptions "HTTP/1.1 200 OK"
+/Users/kgozon/aceit/backend/server.py:174: UserWarning: PySoundFile failed. Trying audioread instead.
+  # Audio Metrics
+/Users/kgozon/aceit/.venv/lib/python3.14/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
+	Deprecated as of librosa version 0.10.0.
+	It will be removed in librosa version 1.0.
+  y, sr_native = __audioread_load(path, offset, duration, dtype)
+W0000 00:00:1771712321.221269 8642058 landmark_projection_calculator.cc:81] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://pkbzwdspwkgcikahxfcj.supabase.co/rest/v1/interview_keyframes "HTTP/2 201 Created"
+INFO:anaylisis.engine:Initializing comprehensive analysis. Since deep analysis takes time, please be patient...
+INFO:anaylisis.engine:Fetching interview keyframes for session_id: 'session-c50928ef'...
+INFO:httpx:HTTP Request: GET https://pkbzwdspwkgcikahxfcj.supabase.co/rest/v1/interview_keyframes?select=%2A&session_id=eq.session-c50928ef&order=timestamp_sec.asc "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/audio/speech "HTTP/1.1 200 OK"
+ERROR:supabase_client:Failed to flush keyframe to Supabase: Object of type bool is not JSON serializable
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:anaylisis.engine:Deep analysis successfully completed.
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/audio/transcriptions "HTTP/1.1 200 OK"
+/Users/kgozon/aceit/backend/server.py:174: UserWarning: PySoundFile failed. Trying audioread instead.
+  # Audio Metrics
+/Users/kgozon/aceit/.venv/lib/python3.14/site-packages/librosa/core/audio.py:184: FutureWarning: librosa.core.audio.__audioread_load
+	Deprecated as of librosa version 0.10.0.
+	It will be removed in librosa version 1.0.
+  y, sr_native = __audioread_load(path, offset, duration, dtype)
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://pkbzwdspwkgcikahxfcj.supabase.co/rest/v1/interview_keyframes "HTTP/2 201 Created"
+INFO:anaylisis.engine:Initializing comprehensive analysis. Since deep analysis takes time, please be patient...
+INFO:anaylisis.engine:Fetching interview keyframes for session_id: 'session-c50928ef'...
+ERROR:supabase_client:Failed to flush keyframe to Supabase: Object of type bool is not JSON serializable
+INFO:httpx:HTTP Request: GET https://pkbzwdspwkgcikahxfcj.supabase.co/rest/v1/interview_keyframes?select=%2A&session_id=eq.session-c50928ef&order=timestamp_sec.asc "HTTP/2 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/audio/speech "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/audio/speech "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:anaylisis.engine:Deep analysis successfully completed.

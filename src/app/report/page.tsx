@@ -8,7 +8,6 @@ import {
   Tooltip, ReferenceLine, ResponsiveContainer, Area
 } from "recharts";
 import { useInterviewStore } from "@/store/useInterviewStore";
-import { MOCK_BIOMETRICS, MOCK_TRANSCRIPT, MOCK_SESSION } from "@/lib/mockData";
 import ReactMarkdown from "react-markdown";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -244,13 +243,17 @@ export default function ReportPage() {
 
   // Fetch real session data if sessionId is present
   useEffect(() => {
-    if (sessionId && !aiCoachingReport && !isFetchingReport) {
+    const idToUse = sessionId || urlSessionId;
+    if (idToUse && !aiCoachingReport && !isFetchingReport) {
       setIsFetchingReport(true);
-      fetch(`/api/session/${sessionId}/data`)
+      fetch(`/api/session/${idToUse}/data`)
         .then(res => res.json())
         .then(data => {
           if (data.report?.report_markdown) {
             setAiCoachingReport(data.report.report_markdown);
+          }
+          if (data.metadata) {
+            setSessionDetails(data.metadata);
           }
           if (data.keyframes && data.keyframes.length > 0) {
             const mappedBiometrics: any[] = [];
@@ -293,28 +296,19 @@ export default function ReportPage() {
         .catch(err => console.error("Failed to fetch session data", err))
         .finally(() => setIsFetchingReport(false));
     }
-  }, [sessionId, aiCoachingReport, setAiCoachingReport, setBiometrics, setTranscript, isFetchingReport]);
+  }, [sessionId, urlSessionId, aiCoachingReport, setAiCoachingReport, setBiometrics, setTranscript, isFetchingReport]);
 
   const { user, isLoaded: isUserLoaded } = useUser();
 
-  // Load session from URL if provided (for viewing past sessions)
-  useEffect(() => {
-    if (urlSessionId) {
-      fetch(`http://127.0.0.1:8080/api/get-session-details?session_id=${urlSessionId}`)
-        .then(res => res.json())
-        .then(data => setSessionDetails(data.data))
-        .catch(err => console.error("Error loading session:", err));
-    }
-  }, [urlSessionId]);
 
-  // Use real store data if available, or sessionDetails, or fallback to mock
-  const data = sessionDetails?.biometrics || ((biometrics && biometrics.length > 0) ? biometrics : MOCK_BIOMETRICS);
-  const txData = sessionDetails?.transcript || ((transcript && transcript.length > 0) ? transcript : MOCK_TRANSCRIPT);
-  const session = sessionDetails ? {
-    role: sessionDetails.role,
-    company: sessionDetails.company,
-    date: sessionDetails.date
-  } : MOCK_SESSION;
+  // Use real store data if available, or sessionDetails, or fallback to empty
+  const data = sessionDetails?.biometrics || ((biometrics && biometrics.length > 0) ? biometrics : []);
+  const txData = sessionDetails?.transcript || ((transcript && transcript.length > 0) ? transcript : []);
+
+  // Use metadata if available
+  const displayRole = sessionDetails?.role || (sessionId ? useInterviewStore.getState().role : "Interview");
+  const displayCompany = sessionDetails?.company || (sessionId ? useInterviewStore.getState().company : "AceIt");
+  const displayDate = sessionDetails?.date || new Date().toLocaleDateString();
 
   // Compute averages safely
   const safeData = data || [];
@@ -365,9 +359,9 @@ export default function ReportPage() {
     try {
       const payload = {
         user_id: user.id,
-        role: session.role,
-        company: session.company,
-        date: session.date,
+        role: displayRole,
+        company: displayCompany,
+        date: displayDate,
         duration: "Demo Duration", // Could be calculated
         score: overall,
         gaze: avgGaze,
@@ -418,16 +412,16 @@ export default function ReportPage() {
               </Link>
             </div>
             <h1 style={{ fontSize: "clamp(1.8rem, 4vw, 3rem)", fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)" }}>
-              {session.role} Report
+              {displayRole} Report
             </h1>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem", color: "var(--muted)", marginTop: "0.5rem" }}>
-              SESSION ID: <span style={{ color: "var(--accent)" }}>{sessionId || "DEMO_UNITS"}</span> · {session.company} · {session.date}
+              SESSION ID: <span style={{ color: "var(--accent)" }}>{sessionId || urlSessionId || "DEMO_SESSION"}</span> · {displayCompany} · {displayDate}
             </p>
           </div>
           <div style={{ display: "flex", gap: "1.5rem" }}>
             <div className="card" style={{ padding: "1rem 1.5rem", textAlign: "center", minWidth: "120px" }}>
               <div style={{ fontSize: "0.65rem", color: "var(--muted)", fontWeight: 700, letterSpacing: "0.1em", marginBottom: "0.25rem" }}>OVERALL SCORE</div>
-              <div style={{ fontSize: "1.5rem", fontWeight: 800, color: scoreColor }}>{overall}%</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 800, color: scoreColor }}>{data.length > 0 ? `${overall}%` : "--%"}</div>
             </div>
           </div>
         </header>

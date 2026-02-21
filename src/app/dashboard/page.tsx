@@ -3,45 +3,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { UserButton, useUser } from "@clerk/nextjs";
 
-// ── MOCK PAST SESSIONS ────────────────────────────────────────────────────────
-const MOCK_SESSIONS = [
-  {
-    id: "s1",
-    role: "Senior Software Engineer",
-    company: "Stripe",
-    date: "Feb 18, 2026",
-    duration: "18m 42s",
-    score: 84,
-    gaze: 88,
-    confidence: 79,
-    composure: 91,
-    spikes: 2,
-  },
-  {
-    id: "s2",
-    role: "Frontend Engineer",
-    company: "Vercel",
-    date: "Feb 15, 2026",
-    duration: "14m 09s",
-    score: 71,
-    gaze: 74,
-    confidence: 68,
-    composure: 77,
-    spikes: 4,
-  },
-  {
-    id: "s3",
-    role: "Full Stack Engineer",
-    company: "Linear",
-    date: "Feb 10, 2026",
-    duration: "22m 31s",
-    score: 63,
-    gaze: 61,
-    confidence: 65,
-    composure: 70,
-    spikes: 6,
-  },
-];
 
 function scoreColor(score: number) {
   if (score >= 80) return "#00e096";
@@ -68,7 +29,7 @@ function ScoreRing({ value, color, size = 52 }: { value: number; color: string; 
   );
 }
 
-function SessionCard({ session, index }: { session: typeof MOCK_SESSIONS[0]; index: number }) {
+function SessionCard({ session, index }: { session: any; index: number }) {
   const color = scoreColor(session.score);
   return (
     <div

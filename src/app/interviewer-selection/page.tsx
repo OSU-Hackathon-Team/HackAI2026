@@ -46,12 +46,15 @@ const INTERVIEWERS = [
 
 export default function InterviewerSelectionPage() {
     const router = useRouter();
-    const { setInterviewerPersona, interviewerPersona } = useInterviewStore();
+    const { setInterviewerPersona, interviewerPersona, setRole, setCompany } = useInterviewStore();
     const [selectedSector, setSelectedSector] = useState<string | null>(null);
     const [hovered, setHovered] = useState<string | null>(null);
 
-    const handleSelect = (id: string) => {
-        setInterviewerPersona(id);
+    const handleSelect = (inter: typeof INTERVIEWERS[0]) => {
+        setInterviewerPersona(inter.id);
+        setRole(inter.role);
+        const sectorName = SECTORS.find(s => s.id === selectedSector)?.name || "AceIt";
+        setCompany(sectorName);
         router.push("/upload");
     };
 
@@ -168,7 +171,7 @@ export default function InterviewerSelectionPage() {
                             key={inter.id}
                             className={`interviewer-card ${interviewerPersona === inter.id ? "selected" : ""}`}
                             style={{ "--card-color": inter.color, "--card-color-low": `${inter.color}15`, "--card-color-med": `${inter.color}30` } as any}
-                            onClick={() => handleSelect(inter.id)}
+                            onClick={() => handleSelect(inter)}
                             onMouseEnter={() => setHovered(inter.id)}
                             onMouseLeave={() => setHovered(null)}
                         >

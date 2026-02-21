@@ -37,7 +37,15 @@ class SupabaseLogger:
             "session_id": session_id,
             "timestamp_sec": timestamp_sec,
         }
-        payload.update(kwargs)
+        
+        # Defensive casting for common JSON serialization issues (e.g. numpy bools)
+        for k, v in kwargs.items():
+            if isinstance(v, bool):
+                payload[k] = bool(v) # Ensure true python bool
+            elif hasattr(v, 'item'): # Handle numpy types
+                payload[k] = v.item()
+            else:
+                payload[k] = v
 
         try:
             response = self.supabase.table("interview_keyframes").insert(payload).execute()
@@ -105,5 +113,37 @@ class SupabaseLogger:
         except Exception as e:
             logger.error(f"Failed to fetch keyframes: {e}")
             return []
+
+    def save_session_metadata(self, session_id: str, role: str, company: str):
+        """
+        Save session-level metadata (role, company).
+        """
+        if not self.supabase:
+            return
+        
+        try:
+            self.supabase.table("interview_sessions").upsert({
+                "id": session_id,
+                "role": role,
+                "company": company,
+                "date": os.popen('date +"%b %d, %Y"').read().strip()
+            }).execute()
+            logger.info(f"Metadata saved for session {session_id}")
+        except Exception as e:
+            logger.error(f"Failed to save session metadata: {e}")
+
+    def get_session_metadata(self, session_id: str):
+        """
+        Retrieve session metadata.
+        """
+        if not self.supabase:
+            return None
+        
+        try:
+            response = self.supabase.table("interview_sessions").select("*").eq("id", session_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Failed to fetch session metadata: {e}")
+            return None
 
 supabase_logger = SupabaseLogger()
