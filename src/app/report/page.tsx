@@ -1,6 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, useClerk } from "@clerk/nextjs";
 import {
 ComposedChart, Line, XAxis, YAxis, CartesianGrid,
@@ -107,19 +107,34 @@ jumpToTime(chartData.activePayload[0].payload.time);
   };
 const { isSignedIn } = useAuth();
 const { openSignIn } = useClerk();
+const searchParams = useSearchParams();
+
+// If user just signed in and was trying to export, auto-trigger print
+useEffect(() => {
+  if (isSignedIn && searchParams.get("action") === "export") {
+    // Small delay to let the page fully render after redirect
+    setTimeout(() => window.print(), 500);
+    // Clean up the URL param
+    router.replace("/report");
+  }
+}, [isSignedIn, searchParams]);
 
 const requireAuth = (action: () => void) => {
   if (isSignedIn) {
     action();
   } else {
-    openSignIn({ afterSignInUrl: "/dashboard" });
+    openSignIn({ afterSignInUrl: "/report?action=export" });
   }
 };
 
-const handleReset = () => requireAuth(() => {
-  reset();
-  router.push("/upload");
-});
+const handleReset = () => {
+  if (isSignedIn) {
+    reset();
+    router.push("/upload");
+  } else {
+    openSignIn({ afterSignInUrl: "/dashboard" });
+  }
+};
 
 const handleExport = () => requireAuth(() => {
   window.print();
