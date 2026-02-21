@@ -34,6 +34,8 @@ interface InterviewStore {
   liveAlert: string | null;
   interviewStartTime: number | null;
   aiCoachingReport: string | null;
+  role: string;
+  company: string;
 
   setPhase: (phase: InterviewPhase) => void;
   setSessionId: (id: string) => void;
@@ -49,6 +51,8 @@ interface InterviewStore {
   setAiCoachingReport: (report: string | null) => void;
   setBiometrics: (biometrics: BiometricPoint[]) => void;
   setTranscript: (transcript: TranscriptEntry[]) => void;
+  setRole: (role: string) => void;
+  setCompany: (company: string) => void;
   reset: () => void;
 }
 
@@ -63,6 +67,8 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
   liveAlert: null,
   interviewStartTime: null,
   aiCoachingReport: null,
+  role: "Software Engineer",
+  company: "AceIt",
 
   setPhase: (phase) => set({ phase }),
   setSessionId: (id) => set({ sessionId: id }),
@@ -89,6 +95,8 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
   setAiCoachingReport: (report) => set({ aiCoachingReport: report }),
   setBiometrics: (biometrics) => set({ biometrics }),
   setTranscript: (transcript) => set({ transcript }),
+  setRole: (role) => set({ role }),
+  setCompany: (company) => set({ company }),
   reset: () =>
     set({
       phase: "upload",
@@ -101,5 +109,7 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
       liveAlert: null,
       interviewStartTime: null,
       aiCoachingReport: null,
+      role: "Software Engineer",
+      company: "AceIt",
     }),
 }));

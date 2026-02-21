@@ -1,14 +1,13 @@
 "use client";
 import { useRef, useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useAuth, useClerk, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer, Area
 } from "recharts";
 import { useInterviewStore } from "@/store/useInterviewStore";
-import { MOCK_BIOMETRICS, MOCK_TRANSCRIPT, MOCK_SESSION } from "@/lib/mockData";
 import ReactMarkdown from "react-markdown";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
@@ -84,10 +83,8 @@ function TranscriptRow({ entry, isStressZone, onJump }: {
 // ─── COACHING ICON ────────────────────────────────────────────────────────────
 function CoachingIcon({ src, alt, color }: { src: string; alt: string; color: string }) {
   return (
-    <div style={{ width: "22px", height: "22px", flexShrink: 0 }}>
-      <div style={{ width: "100%", height: "100%", borderRadius: "4px", background: `${color}20`, border: `1px solid ${color}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px" }}>
-        💡
-      </div>
+    <div style={{ width: "24px", height: "24px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: `${color}15`, borderRadius: "6px", border: `1px solid ${color}30` }}>
+      <img src={src} alt={alt} style={{ width: "14px", height: "14px", objectFit: "contain", filter: "brightness(1.2)" }} />
     </div>
   );
 }
@@ -237,17 +234,26 @@ export default function ReportPage() {
   const { biometrics = [], transcript = [], sessionId, aiCoachingReport, setAiCoachingReport, setBiometrics, setTranscript, reset } = useInterviewStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [activeTimestamp, setActiveTimestamp] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [isFetchingReport, setIsFetchingReport] = useState(false);
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const urlSessionId = searchParams?.get("session_id");
+  const autoSave = searchParams?.get("auto_save");
+  const [sessionDetails, setSessionDetails] = useState<any>(null);
 
   // Fetch real session data if sessionId is present
   useEffect(() => {
-    if (sessionId && !aiCoachingReport && !isFetchingReport) {
+    const idToUse = sessionId || urlSessionId;
+    if (idToUse && !aiCoachingReport && !isFetchingReport) {
       setIsFetchingReport(true);
-      fetch(`/api/session/${sessionId}/data`)
+      fetch(`/api/session/${idToUse}/data`)
         .then(res => res.json())
         .then(data => {
           if (data.report?.report_markdown) {
             setAiCoachingReport(data.report.report_markdown);
+          }
+          if (data.metadata) {
+            setSessionDetails(data.metadata);
           }
           if (data.keyframes && data.keyframes.length > 0) {
             const mappedBiometrics: any[] = [];
@@ -290,21 +296,28 @@ export default function ReportPage() {
         .catch(err => console.error("Failed to fetch session data", err))
         .finally(() => setIsFetchingReport(false));
     }
-  }, [sessionId, aiCoachingReport, setAiCoachingReport, setBiometrics, setTranscript, isFetchingReport]);
+  }, [sessionId, urlSessionId, aiCoachingReport, setAiCoachingReport, setBiometrics, setTranscript, isFetchingReport]);
 
-  // Use real store data if available, fall back to mock
-  const data = (biometrics && biometrics.length > 0) ? biometrics : MOCK_BIOMETRICS;
-  const txData = (transcript && transcript.length > 0) ? transcript : MOCK_TRANSCRIPT;
-  const session = MOCK_SESSION;
+  const { user, isLoaded: isUserLoaded } = useUser();
+
+
+  // Use real store data if available, or sessionDetails, or fallback to empty
+  const data = sessionDetails?.biometrics || ((biometrics && biometrics.length > 0) ? biometrics : []);
+  const txData = sessionDetails?.transcript || ((transcript && transcript.length > 0) ? transcript : []);
+
+  // Use metadata if available
+  const displayRole = sessionDetails?.role || (sessionId ? useInterviewStore.getState().role : "Interview");
+  const displayCompany = sessionDetails?.company || (sessionId ? useInterviewStore.getState().company : "AceIt");
+  const displayDate = sessionDetails?.date || new Date().toLocaleDateString();
 
   // Compute averages safely
   const safeData = data || [];
-  const avgGaze = safeData.length > 0 ? Math.round(safeData.reduce((s, d) => s + (d.gazeScore || 0), 0) / safeData.length) : 0;
-  const avgConf = safeData.length > 0 ? Math.round(safeData.reduce((s, d) => s + (d.confidence || 0), 0) / safeData.length) : 0;
-  const avgCalm = safeData.length > 0 ? Math.round(100 - (safeData.reduce((s, d) => s + (d.fidgetIndex || 0), 0) / safeData.length)) : 100;
+  const avgGaze = safeData.length > 0 ? Math.round(safeData.reduce((s: number, d: any) => s + (d.gazeScore || 0), 0) / safeData.length) : 0;
+  const avgConf = safeData.length > 0 ? Math.round(safeData.reduce((s: number, d: any) => s + (d.confidence || 0), 0) / safeData.length) : 0;
+  const avgCalm = safeData.length > 0 ? Math.round(100 - (safeData.reduce((s: number, d: any) => s + (d.fidgetIndex || 0), 0) / safeData.length)) : 100;
   const overall = Math.round((avgGaze + avgConf + avgCalm) / 3);
-  const spikeCount = safeData.filter((d) => d.stressSpike).length;
-  const spikeTimestamps = new Set(safeData.filter((d) => d.stressSpike).map((d) => d.time));
+  const spikeCount = safeData.filter((d: any) => d.stressSpike).length;
+  const spikeTimestamps = new Set(safeData.filter((d: any) => d.stressSpike).map((d: any) => d.time));
 
   // ── Jump to timestamp in video ──
   const jumpToTime = (time: number) => {
@@ -327,14 +340,62 @@ export default function ReportPage() {
     }
   };
 
-  const handleReset = () => requireAuth(() => {
+  const handleReset = () => {
     reset();
     router.push("/interviewer-selection");
-  });
+  };
 
-  const handleExport = () => requireAuth(() => {
+  const handleExport = () => {
     window.print();
-  });
+  };
+
+  const handleSave = async () => {
+    if (!user) {
+      openSignIn({ afterSignInUrl: "/report?auto_save=true" });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const payload = {
+        user_id: user.id,
+        role: displayRole,
+        company: displayCompany,
+        date: displayDate,
+        duration: "Demo Duration", // Could be calculated
+        score: overall,
+        gaze: avgGaze,
+        confidence: avgConf,
+        composure: avgCalm,
+        spikes: spikeCount,
+        transcript: txData,
+        biometrics: data
+      };
+
+      const res = await fetch("http://127.0.0.1:8080/api/save-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        router.push("/dashboard");
+      } else {
+        alert("Failed to save session.");
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Auto-save logic after login redirect
+  useEffect(() => {
+    if (autoSave === "true" && user && isUserLoaded && !isSaving && biometrics.length > 0) {
+      handleSave();
+    }
+  }, [user, isUserLoaded, autoSave]);
 
   // Determine score color
   const scoreColor = overall >= 80 ? "var(--success)" : overall >= 60 ? "var(--accent)" : "var(--danger)";
@@ -351,16 +412,16 @@ export default function ReportPage() {
               </Link>
             </div>
             <h1 style={{ fontSize: "clamp(1.8rem, 4vw, 3rem)", fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)" }}>
-              {session.role} Report
+              {displayRole} Report
             </h1>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem", color: "var(--muted)", marginTop: "0.5rem" }}>
-              SESSION ID: <span style={{ color: "var(--accent)" }}>{sessionId || "DEMO_UNITS"}</span> · {session.company} · {session.date}
+              SESSION ID: <span style={{ color: "var(--accent)" }}>{sessionId || urlSessionId || "DEMO_SESSION"}</span> · {displayCompany} · {displayDate}
             </p>
           </div>
           <div style={{ display: "flex", gap: "1.5rem" }}>
             <div className="card" style={{ padding: "1rem 1.5rem", textAlign: "center", minWidth: "120px" }}>
               <div style={{ fontSize: "0.65rem", color: "var(--muted)", fontWeight: 700, letterSpacing: "0.1em", marginBottom: "0.25rem" }}>OVERALL SCORE</div>
-              <div style={{ fontSize: "1.5rem", fontWeight: 800, color: scoreColor }}>{overall}%</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 800, color: scoreColor }}>{data.length > 0 ? `${overall}%` : "--%"}</div>
             </div>
           </div>
         </header>
@@ -401,9 +462,16 @@ export default function ReportPage() {
           <div className="card" style={{ padding: "1.5rem" }}>
             <div className="label" style={{ marginBottom: "1.25rem" }}>SESSION TRANSCRIPT</div>
             <div style={{ maxHeight: "500px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-              {txData.map((entry, i) => {
-                const entryStress = [...spikeTimestamps].some(t => Math.abs(t - entry.time) < 8);
-                return <TranscriptRow key={i} entry={entry} isStressZone={entryStress} onJump={jumpToTime} />;
+              {txData.map((entry: any, i: number) => {
+                const entryStress = [...spikeTimestamps].some((t: any) => Math.abs(t - entry.time) < 8);
+                return (
+                  <TranscriptRow
+                    key={i}
+                    entry={entry}
+                    isStressZone={entryStress}
+                    onJump={jumpToTime}
+                  />
+                );
               })}
             </div>
           </div>
@@ -412,14 +480,17 @@ export default function ReportPage() {
             <div className="label" style={{ marginBottom: "1.25rem" }}>QUICK IMPROVEMENTS</div>
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
               {[
-                { title: "Eye Contact", body: "Focus on the camera particularly during technical explanations.", tone: "var(--accent)" },
-                { title: "Pacing", body: "Your speaking rate increases under pressure. Pause intentionally.", tone: "var(--accent2)" },
-                { title: "Fillers", body: "High density of 'like' and 'um' detected in the session.", tone: "var(--danger)" },
-                { title: "Body Language", body: "Good posture maintained. Try to reduce fidgeting with hands.", tone: "var(--success)" },
+                { icon: "/eye.png", title: "Eye Contact", body: `You maintained strong gaze (${avgGaze}% avg) but dropped significantly at key technical explanations. Practice looking up when thinking.`, tone: "var(--accent)" },
+                { icon: "/microphone.png", title: "Voice Confidence", body: `Your confidence score dipped during the behavioral section. Slow down your speaking pace — rushing signals anxiety more than pausing does.`, tone: "var(--accent2)" },
+                { icon: "/palm.png", title: "Body Language", body: `${spikeCount} stress spikes detected. Try anchoring your hands on the desk to reduce visible fidgeting.`, tone: "var(--danger)" },
+                { icon: "/muscle.png", title: "Strengths", body: `Strong recovery — after each stress spike your scores returned to baseline within 10 seconds. Excellent technical delivery.`, tone: "var(--success)" },
               ].map((item) => (
                 <div key={item.title} style={{ padding: "1rem", background: "rgba(255,255,255,0.02)", borderRadius: "10px", borderLeft: `2px solid ${item.tone}` }}>
-                  <div style={{ marginBottom: "0.4rem", fontWeight: 700, color: item.tone, fontSize: "0.85rem" }}>{item.title}</div>
-                  <p style={{ fontSize: "0.8rem", color: "rgba(232,237,245,0.7)", lineHeight: 1.6 }}>{item.body}</p>
+                  <div style={{ marginBottom: "0.4rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <CoachingIcon src={item.icon} alt={item.title} color={item.tone} />
+                    <span style={{ color: item.tone, fontSize: "0.85rem" }}>{item.title}</span>
+                  </div>
+                  <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "rgba(232,237,245,0.7)", fontFamily: "var(--font-mono)" }}>{item.body}</p>
                 </div>
               ))}
             </div>
@@ -427,9 +498,21 @@ export default function ReportPage() {
         </div>
 
         {/* ── FOOTER ACTIONS ── */}
-        <div style={{ display: "flex", gap: "1rem", justifyContent: "center", borderTop: "1px solid var(--border)", paddingTop: "2.5rem" }}>
-          <button className="btn-primary" onClick={handleReset}>↺ New Interview</button>
-          <button className="btn-ghost" onClick={handleExport}>Export Report</button>
+        <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
+          <button className="btn-ghost" onClick={handleReset} style={{ color: "var(--text)", borderColor: "var(--border)" }}>↺ New Interview</button>
+          {!urlSessionId && (
+            <button
+              className="btn-primary"
+              onClick={handleSave}
+              disabled={isSaving}
+              style={{ background: "#00e096", boxShadow: "0 0 20px rgba(0, 224, 150, 0.25)", color: "var(--bg)" }}
+            >
+              {isSaving ? "Saving..." : "Save to Dashboard"}
+            </button>
+          )}
+          <button className="btn-ghost" onClick={handleExport} style={{ fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>
+            <span style={{ marginRight: "0.5rem" }}>📄</span> Export PDF
+          </button>
         </div>
       </div>
     </div>

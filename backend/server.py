@@ -282,6 +282,8 @@ async def init_session(request):
     resume_text = ""
     job_description = ""
     interviewer_persona_id = ""
+    role = "Software Engineer"
+    company = "AceIt"
     
     while True:
         part = await reader.next()
@@ -297,6 +299,10 @@ async def init_session(request):
             job_description = (await part.read()).decode('utf-8')
         elif part.name == 'interviewer_persona':
             interviewer_persona_id = (await part.read()).decode('utf-8')
+        elif part.name == 'role':
+            role = (await part.read()).decode('utf-8')
+        elif part.name == 'company':
+            company = (await part.read()).decode('utf-8')
 
     # Load persona prompt
     persona_prompt = "You are an expert AI Interviewer."
@@ -321,6 +327,9 @@ async def init_session(request):
         )
         first_question = completion.choices[0].message.content
         session_id = f"session-{uuid.uuid4().hex[:8]}"
+        
+        # Save metadata to Supabase
+        supabase_logger.save_session_metadata(session_id, role, company)
         
         return web.json_response({
             "session_id": session_id,
@@ -527,11 +536,31 @@ async def get_session_data_handler(request):
     
     report = supabase_logger.get_report(session_id)
     keyframes = supabase_logger.get_keyframes(session_id)
+    metadata = supabase_logger.get_session_metadata(session_id)
     
     return web.json_response({
         "report": report,
-        "keyframes": keyframes
+        "keyframes": keyframes,
+        "metadata": metadata
     })
+
+async def get_session_details_handler(request):
+    session_id = request.query.get('session_id')
+    if not session_id:
+        return web.json_response({"error": "No session_id provided"}, status=400)
+    
+    metadata = supabase_logger.get_session_metadata(session_id)
+    if not metadata:
+        return web.json_response({"error": "Session not found"}, status=404)
+        
+    # Also fetch data for the old dashboard logic if needed
+    report = supabase_logger.get_report(session_id)
+    keyframes = supabase_logger.get_keyframes(session_id)
+    
+    # Map keyframes back to what the frontend expects for biometrics/transcript if needed
+    # but the report page fetch already does this from /api/session/{id}/data
+    
+    return web.json_response({"data": metadata})
 
 async def on_shutdown(app):
     # close peer connections
@@ -580,6 +609,7 @@ if __name__ == "__main__":
         res_tts = app.router.add_post("/api/tts", tts)
         app.router.add_get("/api/report/{session_id}", get_report_handler)
         app.router.add_get("/api/session/{session_id}/data", get_session_data_handler)
+        app.router.add_get("/api/get-session-details", get_session_details_handler)
 
         # Add CORS to all routes
         for route in list(app.router.routes()):
