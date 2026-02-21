@@ -165,6 +165,8 @@ export default function InterviewPage() {
   const [countdown, setCountdown] = useState<number | null>(null);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     if (phase !== "connecting") return;
@@ -179,6 +181,7 @@ export default function InterviewPage() {
           setCountdown(null);
           startInterview();
           setIsReady(true);
+          startWebRTC();
           startMockStreams();
         }, 1500);
       }
@@ -202,11 +205,70 @@ export default function InterviewPage() {
     }
   }, [transcript]);
 
+  const startWebRTC = async () => {
+    try {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+      });
+      pcRef.current = pc;
+
+      const dc = pc.createDataChannel("chat");
+      dc.onopen = () => console.log("WebRTC DataChannel opened");
+      dc.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === "video_inference" || data.type === "audio_inference") {
+            const conf = data.confidence;
+            console.log(`[WebRTC] Confidence (${data.type}):`, conf);
+            setConfidence(Math.round(conf * 100));
+          }
+        } catch (err) {
+          console.error("Data channel parse error", err);
+        }
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      streamRef.current = stream;
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const res = await fetch("/api/offer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sdp: pc.localDescription?.sdp,
+          type: pc.localDescription?.type
+        })
+      });
+
+      const answer = await res.json();
+      await pc.setRemoteDescription(answer);
+
+      console.log("WebRTC connected successfully");
+    } catch (err) {
+      console.error("WebRTC Error:", err);
+    }
+  };
+
+  const stopWebRTC = () => {
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  };
+
   const startMockStreams = () => {
     MOCK_BIOMETRICS.forEach((point) => {
       setTimeout(() => {
         setGazeScore(point.gazeScore);
-        setConfidence(point.confidence);
+        // We use the live WebRTC confidence score now instead of mock
+        // setConfidence(point.confidence);
         setFidget(point.fidgetIndex);
         addBiometricPoint(point);
       }, point.time * 1000);
@@ -229,6 +291,7 @@ export default function InterviewPage() {
   };
 
   const handleFinish = () => {
+    stopWebRTC();
     finishInterview();
     setTimeout(() => {
       setPhase("report");
