@@ -4,6 +4,49 @@ import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import { MOCK_LIVE_ALERTS, MOCK_TRANSCRIPT, MOCK_BIOMETRICS } from "@/lib/mockData";
 
+// ─── ICONS ────────────────────────────────────────────────────────────────────
+function CameraIcon({ off }: { off: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {off ? (
+        <>
+          <line x1="1" y1="1" x2="23" y2="23" />
+          <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h2a2 2 0 0 1 2 2v9.34" />
+          <circle cx="12" cy="13" r="3" />
+        </>
+      ) : (
+        <>
+          <path d="M23 7l-7 5 7 5V7z" />
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function MicIcon({ off }: { off: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {off ? (
+        <>
+          <line x1="1" y1="1" x2="23" y2="23" />
+          <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+          <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+          <line x1="12" y1="19" x2="12" y2="23" />
+          <line x1="8" y1="23" x2="16" y2="23" />
+        </>
+      ) : (
+        <>
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+          <line x1="12" y1="19" x2="12" y2="23" />
+          <line x1="8" y1="23" x2="16" y2="23" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 // ─── LIVE SCORE RING ──────────────────────────────────────────────────────────
 function ScoreRing({ label, value, color }: { label: string; value: number; color: string }) {
   const r = 28;
@@ -50,7 +93,19 @@ function AvatarPanel({ isSpeaking }: { isSpeaking: boolean }) {
 }
 
 // ─── USER CAMERA PANEL (bottom half) ─────────────────────────────────────────
-function CameraPanel({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement> }) {
+function CameraPanel({
+  videoRef,
+  cameraOn,
+  micOn,
+  onToggleCamera,
+  onToggleMic,
+}: {
+  videoRef: React.RefObject<HTMLVideoElement>;
+  cameraOn: boolean;
+  micOn: boolean;
+  onToggleCamera: () => void;
+  onToggleMic: () => void;
+}) {
   return (
     <div style={{ position: "relative", width: "100%", flex: 1, background: "#000", overflow: "hidden" }}>
       <video
@@ -58,11 +113,33 @@ function CameraPanel({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement>
         autoPlay
         muted
         playsInline
-        style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)", display: "block" }}
+        style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)", display: "block", opacity: cameraOn ? 1 : 0, transition: "opacity 0.3s ease" }}
       />
+      {!cameraOn && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0a0f1a", gap: "0.5rem" }}>
+          <div style={{ color: "var(--muted)", opacity: 0.4 }}><CameraIcon off={true} /></div>
+          <span style={{ fontSize: "0.7rem", fontFamily: "var(--font-mono)", color: "var(--muted)", letterSpacing: "0.08em" }}>CAMERA OFF</span>
+        </div>
+      )}
       <div style={{ position: "absolute", bottom: "0.75rem", left: "0.75rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-        <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--danger)" }} />
+        <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: cameraOn ? "var(--danger)" : "var(--muted)" }} />
         <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)", color: "rgba(255,255,255,0.7)", letterSpacing: "0.08em" }}>YOU</span>
+      </div>
+      <div style={{ position: "absolute", bottom: "0.65rem", right: "0.75rem", display: "flex", gap: "0.5rem" }}>
+        <button
+          onClick={onToggleCamera}
+          title={cameraOn ? "Turn off camera" : "Turn on camera"}
+          style={{ width: "32px", height: "32px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: cameraOn ? "rgba(255,255,255,0.1)" : "rgba(255,77,109,0.3)", color: cameraOn ? "rgba(255,255,255,0.8)" : "var(--danger)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s ease", backdropFilter: "blur(8px)" }}
+        >
+          <CameraIcon off={!cameraOn} />
+        </button>
+        <button
+          onClick={onToggleMic}
+          title={micOn ? "Mute microphone" : "Unmute microphone"}
+          style={{ width: "32px", height: "32px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: micOn ? "rgba(255,255,255,0.1)" : "rgba(255,77,109,0.3)", color: micOn ? "rgba(255,255,255,0.8)" : "var(--danger)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s ease", backdropFilter: "blur(8px)" }}
+        >
+          <MicIcon off={!micOn} />
+        </button>
       </div>
     </div>
   );
@@ -129,26 +206,73 @@ export default function InterviewPage() {
   const [isReady, setIsReady]               = useState(false);
   const [countdown, setCountdown]           = useState<number | null>(null);
   const [connStatus, setConnStatus]         = useState<"connecting" | "connected" | "failed" | "mock">("connecting");
+  const [cameraOn, setCameraOn]             = useState(false);
+  const [micOn, setMicOn]                   = useState(false);
 
-  const transcriptRef = useRef<HTMLDivElement>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const streamRef     = useRef<MediaStream | null>(null);
-  const pcRef         = useRef<RTCPeerConnection | null>(null);
-  const dcRef         = useRef<RTCDataChannel | null>(null);
+  const transcriptRef  = useRef<HTMLDivElement>(null);
+  const localVideoRef  = useRef<HTMLVideoElement>(null);
+  const streamRef      = useRef<MediaStream | null>(null);
+  const pcRef          = useRef<RTCPeerConnection | null>(null);
+  const dcRef          = useRef<RTCDataChannel | null>(null);
+  const interviewStartedRef = useRef(false); // guard so startInterview only fires once
 
-  // ── Grab webcam on mount ──────────────────────────────────────────────────
-  useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
+  // ── Start timer + interview when camera or mic first turns on ─────────────
+  const maybeStartInterview = () => {
+    if (interviewStartedRef.current) return;
+    interviewStartedRef.current = true;
+    startInterview();
+    setIsReady(true);
+    startWebRTC();
+    startMockTranscript();
+  };
+
+  // ── Toggle camera ─────────────────────────────────────────────────────────
+  const handleToggleCamera = async () => {
+    if (!streamRef.current) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         streamRef.current = stream;
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-      })
-      .catch(err => {
-        console.error("Camera access denied:", err);
-        setConnStatus("failed");
-      });
-    return () => { streamRef.current?.getTracks().forEach(t => t.stop()); };
-  }, []);
+        // Leave audio enabled state consistent with micOn
+        stream.getAudioTracks().forEach(t => { t.enabled = micOn; });
+        setCameraOn(true);
+        maybeStartInterview();
+      } catch (err) {
+        console.error("Camera permission denied:", err);
+      }
+      return;
+    }
+    const videoTracks = streamRef.current.getVideoTracks();
+    if (videoTracks.length === 0) return;
+    const newState = !cameraOn;
+    videoTracks.forEach(t => { t.enabled = newState; });
+    setCameraOn(newState);
+    if (newState) maybeStartInterview();
+  };
+
+  // ── Toggle mic ────────────────────────────────────────────────────────────
+  const handleToggleMic = async () => {
+    if (!streamRef.current) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        streamRef.current = stream;
+        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+        // Leave video enabled state consistent with cameraOn
+        stream.getVideoTracks().forEach(t => { t.enabled = cameraOn; });
+        setMicOn(true);
+        maybeStartInterview();
+      } catch (err) {
+        console.error("Mic permission denied:", err);
+      }
+      return;
+    }
+    const audioTracks = streamRef.current.getAudioTracks();
+    if (audioTracks.length === 0) return;
+    const newState = !micOn;
+    audioTracks.forEach(t => { t.enabled = newState; });
+    setMicOn(newState);
+    if (newState) maybeStartInterview();
+  };
 
   // ── WebRTC ────────────────────────────────────────────────────────────────
   const startWebRTC = async () => {
@@ -158,24 +282,14 @@ export default function InterviewPage() {
       startMockStreams();
       return;
     }
-
     console.log("%c[WebRTC] Starting connection to backend...", "color:#febc2e;font-weight:bold");
-
     try {
       setConnStatus("connecting");
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
-          {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-          },
-          {
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-          },
+          { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+          { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
         ],
         iceTransportPolicy: "all",
       });
@@ -193,23 +307,12 @@ export default function InterviewPage() {
 
       const dc = pc.createDataChannel("inference");
       dcRef.current = dc;
-      console.log("%c[DataChannel] Created channel 'inference'", "color:#7b61ff");
-
-      dc.onopen = () => {
-        console.log("%c[DataChannel] ✓ OPEN — backend AI is live", "color:#00e096;font-weight:bold");
-        setConnStatus("connected");
-        dc.send("ping");
-      };
+      dc.onopen = () => { setConnStatus("connected"); dc.send("ping"); };
       dc.onclose = () => console.log("%c[DataChannel] closed", "color:#5a6a82");
-      dc.onerror = (e) => console.error("%c[DataChannel] ✗ error:", "color:#ff4d6d", e);
-
+      dc.onerror = (e) => console.error("%c[DataChannel] error:", "color:#ff4d6d", e);
       dc.onmessage = (event) => {
-        console.log("%c[DataChannel] raw message:", "color: #5a6a82", event.data);
         try {
-          if (typeof event.data === "string" && event.data.startsWith("pong")) {
-            console.log("%c[DataChannel] ✓ pong received", "color: #00e096");
-            return;
-          }
+          if (typeof event.data === "string" && event.data.startsWith("pong")) return;
           const msg = JSON.parse(event.data);
           if (msg.type === "video_inference") {
             const conf = Math.round(msg.confidence * 100);
@@ -227,10 +330,7 @@ export default function InterviewPage() {
         } catch { /* non-JSON */ }
       };
 
-      streamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, streamRef.current!);
-        console.log(`%c[WebRTC] Added ${track.kind} track`, "color:#7b61ff");
-      });
+      streamRef.current.getTracks().forEach(track => pc.addTrack(track, streamRef.current!));
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -240,11 +340,10 @@ export default function InterviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sdp: offer.sdp, type: offer.type }),
       });
-
       if (!res.ok) throw new Error(`Backend returned ${res.status}`);
       const answer = await res.json();
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
-      console.log("%c[WebRTC] ✓ Handshake complete — waiting for ICE...", "color:#00e5ff;font-weight:bold");
+      console.log("%c[WebRTC] ✓ Handshake complete", "color:#00e5ff;font-weight:bold");
 
     } catch (err) {
       console.error("%c[WebRTC] ✗ Setup failed — falling back to mock:", "color:#ff4d6d;font-weight:bold", err);
@@ -253,7 +352,7 @@ export default function InterviewPage() {
     }
   };
 
-  // ── Countdown ─────────────────────────────────────────────────────────────
+  // ── Countdown (visual only — timer starts on first device toggle) ─────────
   useEffect(() => {
     if (phase !== "connecting") return;
     setCountdown(10);
@@ -263,13 +362,8 @@ export default function InterviewPage() {
       setCountdown(current);
       if (current <= 0) {
         clearInterval(ticker);
-        setTimeout(() => {
-          setCountdown(null);
-          startInterview();
-          setIsReady(true);
-          startWebRTC();
-          startMockTranscript();
-        }, 1500);
+        setTimeout(() => setCountdown(null), 1500);
+        // Note: interview/timer does NOT start here — waits for camera/mic toggle
       }
     }, 1000);
     return () => clearInterval(ticker);
@@ -277,7 +371,7 @@ export default function InterviewPage() {
 
   useEffect(() => { if (phase === "live") setIsReady(true); }, [phase]);
 
-  // ── Timer ─────────────────────────────────────────────────────────────────
+  // ── Timer — only runs once isReady is true ────────────────────────────────
   useEffect(() => {
     if (!isReady) return;
     const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
@@ -289,6 +383,11 @@ export default function InterviewPage() {
     if (transcriptRef.current)
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
   }, [transcript]);
+
+  // ── Cleanup on unmount ────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => { streamRef.current?.getTracks().forEach(t => t.stop()); };
+  }, []);
 
   // ── Mock streams ──────────────────────────────────────────────────────────
   const startMockStreams = () => {
@@ -356,8 +455,9 @@ export default function InterviewPage() {
           </div>
           <ConnectionBadge status={connStatus} />
         </div>
-        <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 500, letterSpacing: "0.05em" }}>
-          {formatTime(elapsedSeconds)}
+        {/* Timer dims until interview starts */}
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 500, letterSpacing: "0.05em", color: isReady ? "var(--text)" : "var(--muted)", transition: "color 0.3s ease" }}>
+          {isReady ? formatTime(elapsedSeconds) : "--:--"}
         </div>
         <button className="btn-danger" onClick={handleFinish} style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
           End Interview
@@ -368,15 +468,18 @@ export default function InterviewPage() {
       <main style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "1.5rem", padding: "1.5rem 2rem", overflow: "hidden" }}>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-
-          {/* ── Split panel: AI top / Camera bottom ── */}
           <div style={{ display: "flex", flexDirection: "column", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "4/3" }}>
             <AvatarPanel isSpeaking={isSpeaking} />
             <div style={{ height: "1px", background: "var(--border)", flexShrink: 0 }} />
-            <CameraPanel videoRef={localVideoRef} />
+            <CameraPanel
+              videoRef={localVideoRef}
+              cameraOn={cameraOn}
+              micOn={micOn}
+              onToggleCamera={handleToggleCamera}
+              onToggleMic={handleToggleMic}
+            />
           </div>
 
-          {/* ── Score rings ── */}
           <div className="card" style={{ display: "flex", justifyContent: "space-around", padding: "1.25rem" }}>
             <ScoreRing label="GAZE"       value={gazeScore}    color="var(--accent)"  />
             <ScoreRing label="CONFIDENCE" value={confidence}   color="var(--accent2)" />
@@ -384,7 +487,6 @@ export default function InterviewPage() {
           </div>
         </div>
 
-        {/* ── RIGHT PANEL: alerts + transcript ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", overflow: "hidden" }}>
           <div style={{ minHeight: "52px" }}>
             {liveAlert && (
@@ -398,7 +500,9 @@ export default function InterviewPage() {
             <div className="label" style={{ marginBottom: "0.75rem" }}>LIVE TRANSCRIPT</div>
             <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
               {transcript.length === 0 ? (
-                <div className="label" style={{ textAlign: "center", marginTop: "2rem" }}>Waiting for interview to begin...</div>
+                <div className="label" style={{ textAlign: "center", marginTop: "2rem" }}>
+                  {isReady ? "Listening..." : "Turn on your camera or mic to begin"}
+                </div>
               ) : (
                 transcript.map((entry, i) => (
                   <div key={i} className="fade-up" style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
