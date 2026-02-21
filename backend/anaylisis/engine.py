@@ -44,32 +44,39 @@ class InterviewAnalyzerEngine:
         if not self.prompt_path.exists():
             raise FileNotFoundError(f"Analyzer prompt file not found at {self.prompt_path}")
             
-    async def fetch_session_keyframes(self, session_id: str) -> list[dict]:
+    async def fetch_session_keyframes(self, session_id: str, wait_for_metrics: bool = True) -> list[dict]:
         """
-        Asynchronously fetch the entire set of keyframes for a specific interview session.
-        Sorts them chronologically.
+        Asynchronously fetch keyframes. If wait_for_metrics is True, it will poll 
+        briefly to ensure background biometric tasks have flushed their data.
         """
         if not supabase_logger.supabase:
-            logger.error("Supabase client is not connected. Check environment variables.")
+            logger.error("Supabase client is not connected.")
             raise RuntimeError("Supabase client not initialized")
         
-        # The Supabase Python SDK defaults to synchronous HTTP requests
-        # We run it in a thread pool executor to make the engine purely non-blocking
         def _fetch_sync():
-            try:
-                response = supabase_logger.supabase.table("interview_keyframes") \
-                    .select("*") \
-                    .eq("session_id", session_id) \
-                    .order("timestamp_sec") \
-                    .execute()
-                return response.data
-            except Exception as e:
-                logger.error(f"Database fetch failed for session {session_id}: {e}")
-                raise e
+            return supabase_logger.supabase.table("interview_keyframes") \
+                .select("*") \
+                .eq("session_id", session_id) \
+                .order("timestamp_sec") \
+                .execute().data
 
-        logger.info(f"Fetching interview keyframes for session_id: '{session_id}'...")
         loop = asyncio.get_running_loop()
-        keyframes = await loop.run_in_executor(None, _fetch_sync)
+        
+        # Max 15 retries (approx 15 seconds total)
+        for attempt in range(15):
+            keyframes = await loop.run_in_executor(None, _fetch_sync)
+            
+            # Check if we have any keyframes with actual biometric metrics
+            has_metrics = any(k.get("keyframe_reason") == "Background Analysis" for k in keyframes)
+            
+            if not wait_for_metrics or has_metrics or not keyframes:
+                if has_metrics:
+                    print(f"[DEBUG] Analyzer Engine: Found metrics data for {session_id} on attempt {attempt+1}")
+                break
+                
+            print(f"[DEBUG] Analyzer Engine: No metrics found yet for {session_id}. Retrying... ({attempt+1}/15)")
+            await asyncio.sleep(1)
+            
         return keyframes
 
     async def generate_report(self, session_id: str, interviewer_persona: str) -> str:
@@ -103,6 +110,10 @@ class InterviewAnalyzerEngine:
         
         # Convert back to sorted list
         sorted_merged = [merged_keyframes[ts] for ts in sorted(merged_keyframes.keys())]
+        
+        print(f"[DEBUG] Analyzer Engine: Processed {len(keyframes)} raw keyframes into {len(sorted_merged)} merged snapshots.")
+        if sorted_merged:
+            print(f"[DEBUG] Sample Snapshot (T={sorted_merged[0].get('timestamp_sec')}): Gaze={sorted_merged[0].get('gaze_score')}, RMS={sorted_merged[0].get('volume_rms')}, Transcript={'Yes' if sorted_merged[0].get('associated_transcript') else 'No'}")
 
         # Format input cleanly as described in the strict analyzer_prompt.txt
         input_payload = {
@@ -119,6 +130,7 @@ class InterviewAnalyzerEngine:
         try:
             # We enforce high precision analysis. temperature=0.3 helps stay grounded in the data 
             # while providing structured analysis matching the markdown requirements.
+            print(f"[INFO] Sending {len(ai_input_message)} characters of session data to {self.model}...")
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[

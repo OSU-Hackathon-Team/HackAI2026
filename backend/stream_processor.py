@@ -203,7 +203,9 @@ class VideoStreamProcessor:
             except av.error.EOFError:
                 break
             except Exception as e:
-                print(f"Video iteration error: {e}")
+                err_str = str(e)
+                if "Connection lost" not in err_str and "Stream connection lost" not in err_str and "Track was closed" not in err_str:
+                    print(f"Video iteration error: {e}")
                 break
 
     def _detect_and_buffer(self, mp_image, timestamp_ms):

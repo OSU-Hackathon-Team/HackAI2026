@@ -33,26 +33,41 @@ class SupabaseLogger:
         if not self.supabase:
             return None
 
-        payload = {
-            "session_id": session_id,
-            "timestamp_sec": timestamp_sec,
-        }
-        # Defensive casting for common JSON serialization issues (e.g. numpy bools/floats)
-        for k, v in kwargs.items():
-            if hasattr(v, 'item'): # Handle numpy types (both bools and numbers)
-                payload[k] = v.item()
-            elif isinstance(v, (bool, int, float, str)) or v is None:
-                payload[k] = v
-            else:
-                payload[k] = v # Fallback
-
-        print(f"[DEBUG] Supabase Insert Request: {payload}")
-
         try:
-            response = self.supabase.table("interview_keyframes").insert(payload).execute()
-            if response.data:
-                print(f"[DEBUG] Supabase Insert Success: ID={response.data[0].get('id')}")
-            return response.data[0] if response.data else None
+            # Check if a keyframe for this exact session_id and timestamp_sec exists
+            existing = self.supabase.table("interview_keyframes").select("id, keyframe_reason").eq("session_id", session_id).eq("timestamp_sec", float(timestamp_sec)).execute()
+            
+            payload = {
+                "session_id": session_id,
+                "timestamp_sec": timestamp_sec,
+            }
+            # Defensive casting for common JSON serialization issues (e.g. numpy bools/floats)
+            for k, v in kwargs.items():
+                if hasattr(v, 'item'): # Handle numpy types (both bools and numbers)
+                    payload[k] = v.item()
+                elif isinstance(v, (bool, int, float, str)) or v is None:
+                    payload[k] = v
+                else:
+                    payload[k] = v # Fallback
+
+            if existing.data:
+                # Update existing record
+                keyframe_id = existing.data[0]["id"]
+                existing_reason = existing.data[0].get("keyframe_reason")
+                
+                # Avoid overwriting a descriptive AI label with the generic Background Analysis label
+                if existing_reason and "AI Turn" in existing_reason and payload.get("keyframe_reason") == "Background Analysis":
+                    del payload["keyframe_reason"]
+                    
+                print(f"[DEBUG] Supabase Update Request (Merging): ID={keyframe_id}, Payload={payload}")
+                response = self.supabase.table("interview_keyframes").update(payload).eq("id", keyframe_id).execute()
+                return response.data[0] if response.data else None
+            else:
+                print(f"[DEBUG] Supabase Insert Request: {payload}")
+                response = self.supabase.table("interview_keyframes").insert(payload).execute()
+                if response.data:
+                    print(f"[DEBUG] Supabase Insert Success: ID={response.data[0].get('id')}")
+                return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Failed to flush keyframe to Supabase: {e}")
             return None
@@ -124,12 +139,13 @@ class SupabaseLogger:
         if not self.supabase:
             return
         
+        from datetime import datetime
         try:
             self.supabase.table("interview_sessions").upsert({
                 "id": session_id,
                 "role": role,
                 "company": company,
-                "date": os.popen('date +"%b %d, %Y"').read().strip()
+                "date": datetime.now().strftime("%b %d, %Y")
             }).execute()
             logger.info(f"Metadata saved for session {session_id}")
         except Exception as e:

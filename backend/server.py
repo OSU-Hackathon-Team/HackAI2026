@@ -26,7 +26,7 @@ from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
 from supabase_client import supabase_logger
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from scipy.interpolate import interp1d
 import cv2
 import torch
@@ -46,7 +46,14 @@ try:
     )
     from anaylisis.engine import InterviewAnalyzerEngine
     
-    client = OpenAI()
+    sync_client = OpenAI()
+    _async_client = None
+    def get_async_client():
+        global _async_client
+        if _async_client is None:
+            _async_client = AsyncOpenAI()
+        return _async_client
+        
     analyzer_engine = InterviewAnalyzerEngine()
     print("Backend initialization successful (Models, API clients, & Analyzer ready)")
 except Exception as e:
@@ -178,7 +185,7 @@ async def stream_process(request):
 
     try:
         with open(temp_audio, "rb") as f:
-            transcription = client.audio.transcriptions.create(model="whisper-1", file=f)
+            transcription = await get_async_client().audio.transcriptions.create(model="whisper-1", file=f)
         text = transcription.text
         
         # 2. Return text to frontend ASAP
@@ -321,7 +328,7 @@ async def init_session(request):
     user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
     
     try:
-        completion = client.chat.completions.create(
+        completion = await get_async_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         )
@@ -389,13 +396,13 @@ async def chat(request):
     full_ai_response = ""
     try:
         # Use stream=True for token-by-token delivery
-        stream = client.chat.completions.create(
+        stream = await get_async_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
             stream=True
         )
 
-        for chunk in stream:
+        async for chunk in stream:
             if chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
                 full_ai_response += content
@@ -441,8 +448,11 @@ async def tts(request):
     text = data.get('text', '')
     try:
         temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.mp3")
-        with client.audio.speech.with_streaming_response.create(model="tts-1", voice="nova", input=text) as response:
-            response.stream_to_file(temp_audio)
+        # Run synchronous TTS via to_thread to avoid event loop blocking
+        def _sync_tts():
+            with sync_client.audio.speech.with_streaming_response.create(model="tts-1", voice="nova", input=text) as response:
+                response.stream_to_file(temp_audio)
+        await asyncio.to_thread(_sync_tts)
         return web.FileResponse(temp_audio)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
