@@ -28,6 +28,7 @@ interface InterviewStore {
   jobText: string | null;
   biometrics: BiometricPoint[];
   transcript: TranscriptEntry[];
+  interviewerPersona: string | null;
   liveAlert: string | null;
   interviewStartTime: number | null;
 
@@ -35,6 +36,7 @@ interface InterviewStore {
   setSessionId: (id: string) => void;
   setResumeText: (text: string) => void;
   setJobText: (text: string) => void;
+  setInterviewerPersona: (persona: string) => void;
   addBiometricPoint: (point: BiometricPoint) => void;
   addTranscriptEntry: (entry: TranscriptEntry) => void;
   setLiveAlert: (alert: string | null) => void;
@@ -48,6 +50,7 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
   sessionId: null,
   resumeText: null,
   jobText: null,
+  interviewerPersona: "10_data_scientist", // Default
   biometrics: [],
   transcript: [],
   liveAlert: null,
@@ -57,6 +60,7 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
   setSessionId: (id) => set({ sessionId: id }),
   setResumeText: (text) => set({ resumeText: text }),
   setJobText: (text) => set({ jobText: text }),
+  setInterviewerPersona: (persona) => set({ interviewerPersona: persona }),
   addBiometricPoint: (point) =>
     set((state) => ({ biometrics: [...state.biometrics, point] })),
   addTranscriptEntry: (entry) =>
@@ -71,6 +75,7 @@ export const useInterviewStore = create<InterviewStore>((set) => ({
       sessionId: null,
       resumeText: null,
       jobText: null,
+      interviewerPersona: "10_data_scientist",
       biometrics: [],
       transcript: [],
       liveAlert: null,

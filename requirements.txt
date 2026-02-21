@@ -13,3 +13,4 @@ requests
 librosa
 soundfile
 python-dotenv
+pypdf
