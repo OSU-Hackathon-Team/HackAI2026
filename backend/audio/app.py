@@ -209,6 +209,10 @@ def stream_process():
     try:
         audio_file.save(temp_filepath)
         
+        # Check if the file is extremely small or empty (Whisper API crashes on 0-byte files)
+        if os.path.getsize(temp_filepath) < 100:
+            return jsonify({"error": "Audio recording is too short or empty"}), 400
+            
         # Transcription
         with open(temp_filepath, "rb") as file_to_transcribe:
             transcription = client.audio.transcriptions.create(
@@ -219,12 +223,9 @@ def stream_process():
         text = transcription.text
         word_count = len(text.split())
         
-        # Audio length using soundfile directly (faster than librosa.load)
-        y, sr = sf.read(temp_filepath)
-        if len(y.shape) > 1:
-            y = y.mean(axis=1) # mono conversion
-            
-        duration = len(y) / sr
+        # Audio length using librosa (since soundfile cannot decode webm)
+        y, sr = librosa.load(temp_filepath, sr=None)
+        duration = librosa.get_duration(y=y, sr=sr)
         
         # Pacing: (word_count / duration * 60). Normalize against a 200 WPM max.
         pacing_wpm = (word_count / duration) * 60 if duration > 0 else 0
