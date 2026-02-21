@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import ReactMarkdown from "react-markdown";
+import { IntelligenceReport } from "@/components/IntelligenceReport";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 export interface BiometricDataPoint {
@@ -40,10 +41,17 @@ function CustomTooltip({ active, payload, label }: any) {
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
   return (
-    <div className="card" style={{ borderLeft: `3px solid ${color}` }}>
-      <div className="label">{label}</div>
-      <div style={{ fontSize: "2.5rem", fontWeight: 800, color, lineHeight: 1.1, margin: "0.4rem 0" }}>{value}</div>
-      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.78rem", color: "var(--muted)" }}>{sub}</div>
+    <div style={{
+      padding: "2rem",
+      background: "transparent",
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center",
+      borderRight: "1px solid var(--border)"
+    }}>
+      <div className="label" style={{ color: "var(--muted)", fontWeight: 800, fontSize: "0.6rem", letterSpacing: "0.2em" }}>{label}</div>
+      <div style={{ fontSize: "3.5rem", fontWeight: 400, color: color, lineHeight: 1, margin: "0.5rem 0", fontFamily: "var(--font-display)" }}>{value}</div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "var(--muted)", letterSpacing: "0.1em" }}>{sub}</div>
     </div>
   );
 }
@@ -58,27 +66,39 @@ function TranscriptRow({ entry, isStressZone, onJump }: {
     <div
       onClick={() => onJump(entry.time)}
       style={{
-        display: "flex", gap: "1rem", padding: "0.75rem", borderRadius: "8px", cursor: "pointer",
-        background: isStressZone ? "rgba(255,77,109,0.05)" : "transparent",
-        border: `1px solid ${isStressZone ? "rgba(255,77,109,0.2)" : "transparent"}`,
-        transition: "all 0.15s ease",
+        display: "flex", gap: "1.25rem", padding: "1rem", borderRadius: "12px", cursor: "pointer",
+        background: isStressZone ? "rgba(255,77,109,0.08)" : "rgba(255,255,255,0.02)",
+        border: `1px solid ${isStressZone ? "rgba(255,77,109,0.25)" : "rgba(255,255,255,0.05)"}`,
+        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+        marginRight: "0.5rem"
       }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = isStressZone ? "rgba(255,77,109,0.05)" : "transparent")}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+        e.currentTarget.style.transform = "translateX(4px)";
+        e.currentTarget.style.borderColor = "var(--accent)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = isStressZone ? "rgba(255,77,109,0.08)" : "rgba(255,255,255,0.02)";
+        e.currentTarget.style.transform = "none";
+        e.currentTarget.style.borderColor = isStressZone ? "rgba(255,77,109,0.25)" : "rgba(255,255,255,0.05)";
+      }}
     >
-      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--muted)", whiteSpace: "nowrap", paddingTop: "2px" }}>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--accent)", whiteSpace: "nowrap", paddingTop: "4px", width: "40px" }}>
         {String(Math.floor(entry.time / 60)).padStart(2, "0")}:{String(entry.time % 60).padStart(2, "0")}
       </div>
-      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", fontWeight: 700, color: entry.speaker === "interviewer" ? "var(--accent)" : "var(--accent2)", paddingTop: "2px", width: "24px", flexShrink: 0 }}>
-        {entry.speaker === "interviewer" ? "AI" : "YOU"}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.6rem", fontWeight: 800, color: entry.speaker === "interviewer" ? "var(--accent2)" : "var(--success)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          {entry.speaker === "interviewer" ? "ACEIT-AI" : "CANDIDATE"}
+        </div>
+        <p style={{ fontSize: "0.9rem", lineHeight: 1.6, color: isStressZone ? "#fff" : "var(--text-dim)", fontFamily: "var(--font-body)" }}>
+          {entry.text}
+          {isStressZone && <span style={{ marginLeft: "0.75rem", fontSize: "0.65rem", padding: "0.1rem 0.4rem", background: "var(--danger)", borderRadius: "4px", color: "#fff", fontWeight: 800 }}>STRESS ZONE</span>}
+        </p>
       </div>
-      <p style={{ fontSize: "0.875rem", lineHeight: 1.55, color: isStressZone ? "rgba(232,237,245,0.9)" : "rgba(232,237,245,0.7)" }}>
-        {entry.text}
-        {isStressZone && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", color: "var(--danger)" }}>⚠ stress zone</span>}
-      </p>
     </div>
   );
 }
+
 
 // ─── COACHING ICON ────────────────────────────────────────────────────────────
 function CoachingIcon({ src, alt, color }: { src: string; alt: string; color: string }) {
@@ -401,67 +421,102 @@ export default function ReportPage() {
   const scoreColor = overall >= 80 ? "var(--success)" : overall >= 60 ? "var(--accent)" : "var(--danger)";
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", padding: "2rem" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", padding: "4rem 2rem" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
         {/* ── HEADER ── */}
-        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "3rem" }}>
+        <header style={{
+          display: "flex", justifyContent: "space-between", alignItems: "flex-end",
+          marginBottom: "6rem", position: "relative"
+        }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
-              <Link href="/" onClick={reset} style={{ color: "var(--muted)", fontSize: "0.8rem", textDecoration: "none", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                ← BACK TO HOME
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem" }}>
+              <Link href="/" onClick={reset} style={{
+                color: "var(--muted)", fontSize: "0.65rem", textDecoration: "none",
+                display: "flex", alignItems: "center", gap: "0.5rem",
+                fontFamily: "var(--font-mono)", letterSpacing: "0.15em",
+                fontWeight: 800
+              }}>
+                <span style={{ fontSize: "1rem" }}>←</span> / RETURN_TO_BASE
               </Link>
             </div>
-            <h1 style={{ fontSize: "clamp(1.8rem, 4vw, 3rem)", fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)" }}>
-              {displayRole} Report
+            <h1 style={{
+              fontSize: "clamp(4.5rem, 8vw, 6.5rem)", fontWeight: 400, letterSpacing: "-0.02em",
+              color: "#fff", fontFamily: "var(--font-display)", lineHeight: 0.8,
+              textTransform: "uppercase"
+            }}>
+              {displayRole} <br />
+              <span style={{ color: "var(--accent)" }}>PERFORMANCE_REP</span>
             </h1>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem", color: "var(--muted)", marginTop: "0.5rem" }}>
-              SESSION ID: <span style={{ color: "var(--accent)" }}>{sessionId || urlSessionId || "DEMO_SESSION"}</span> · {displayCompany} · {displayDate}
-            </p>
+            <div style={{
+              fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--muted)",
+              marginTop: "2.5rem", display: "flex", alignItems: "center", gap: "1.5rem",
+              letterSpacing: "0.15em"
+            }}>
+              <span style={{ padding: "0.25rem 0.75rem", border: "1px solid var(--border)", color: "var(--accent)" }}>
+                ID / {sessionId || urlSessionId || "DEMO_SYS"}
+              </span>
+              <span style={{ color: "var(--text-dim)" }}>{displayCompany.toUpperCase()}</span>
+              <span style={{ color: "var(--text-dim)" }}>{displayDate.toUpperCase()}</span>
+            </div>
           </div>
           <div style={{ display: "flex", gap: "1.5rem" }}>
-            <div className="card" style={{ padding: "1rem 1.5rem", textAlign: "center", minWidth: "120px" }}>
-              <div style={{ fontSize: "0.65rem", color: "var(--muted)", fontWeight: 700, letterSpacing: "0.1em", marginBottom: "0.25rem" }}>OVERALL SCORE</div>
-              <div style={{ fontSize: "1.5rem", fontWeight: 800, color: scoreColor }}>{data.length > 0 ? `${overall}%` : "--%"}</div>
+            <div style={{
+              padding: "1.5rem 3rem", textAlign: "right",
+              borderRight: "4px solid var(--accent)",
+              background: "linear-gradient(90deg, transparent, rgba(202,255,0,0.03))"
+            }}>
+              <div style={{ fontSize: "0.6rem", color: "var(--muted)", fontWeight: 800, letterSpacing: "0.3em", marginBottom: "0.5rem" }}>SESSION_QUOTIENT</div>
+              <div style={{ fontSize: "4.5rem", fontWeight: 400, color: scoreColor, fontFamily: "var(--font-display)", lineHeight: 1 }}>
+                {data.length > 0 ? `${overall}%` : "--%"}
+              </div>
             </div>
           </div>
         </header>
 
         {/* ── STAT CARDS ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1.5rem", marginBottom: "2rem" }}>
-          <StatCard label="GAZE STABILITY" value={`${avgGaze}%`} sub="avg across session" color="var(--accent)" />
-          <StatCard label="VOICE CONFIDENCE" value={`${avgConf}%`} sub="tone & pacing" color="var(--accent2)" />
-          <StatCard label="COMPOSURE" value={`${avgCalm}%`} sub="low fidget index" color="var(--success)" />
-          <StatCard label="STRESS SPIKES" value={`${spikeCount}`} sub="moments flagged" color="var(--danger)" />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1px", background: "var(--border)", marginBottom: "4rem", border: "1px solid var(--border)" }}>
+          <StatCard label="GAZE_STABILITY" value={`${avgGaze}%`} sub="INDEX / STABLE" color="var(--accent)" />
+          <StatCard label="VOCAL_AUTHORITY" value={`${avgConf}%`} sub="RESONANCE / PEAK" color="var(--accent)" />
+          <StatCard label="CORE_COMPOSURE" value={`${avgCalm}%`} sub="FIDGET / LOW" color="var(--accent)" />
+          <StatCard label="STRESS_SPIKES" value={`${spikeCount}`} sub="CRITICAL_EVENTS" color="var(--danger)" />
         </div>
 
         {/* ── PERFORMANCE CHARTS ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem", marginBottom: "2rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1.5rem", marginBottom: "6rem" }}>
           <InternalBiometricChart data={safeData} activeTimestamp={activeTimestamp} onChartClick={jumpToTime} />
           <InternalSpeechChart data={safeData} activeTimestamp={activeTimestamp} onChartClick={jumpToTime} />
         </div>
 
         {/* ── AI COACHING REPORT ── */}
-        <div className="card" style={{ padding: "2.5rem", marginBottom: "3rem" }}>
-          <div className="label" style={{ marginBottom: "1.5rem" }}>FULL AI COACHING REPORT</div>
-          <div style={{ fontSize: "0.95rem", lineHeight: 1.7, color: "rgba(232,237,245,0.8)" }} className="markdown-report">
-            {aiCoachingReport ? (
-              <ReactMarkdown>{aiCoachingReport}</ReactMarkdown>
-            ) : isFetchingReport ? (
-              <div style={{ padding: "2rem", textAlign: "center", color: "var(--muted)" }}>
-                <div className="pulse-ring" style={{ width: "20px", height: "20px", margin: "0 auto 1rem" }} />
-                FINALIZING DEEP ANALYSIS...
-              </div>
-            ) : (
-              <div style={{ color: "var(--muted)" }}>No detailed report available yet. This may be a demo session.</div>
-            )}
-          </div>
-        </div>
+        <section style={{ marginBottom: "8rem" }}>
+          {aiCoachingReport ? (
+            <IntelligenceReport content={aiCoachingReport} />
+          ) : isFetchingReport ? (
+            <div style={{ padding: "10rem 2rem", textAlign: "center" }}>
+              <div style={{
+                width: "48px", height: "48px", border: "2px solid rgba(202,255,0,0.1)",
+                borderTopColor: "var(--accent)", borderRadius: "50%",
+                animation: "spin 1s linear infinite",
+                margin: "0 auto 3rem"
+              }} />
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", letterSpacing: "0.3em", color: "var(--accent)" }}>SYNCHRONIZING_NEURAL_PATTERNS...</div>
+            </div>
+          ) : (
+            <div style={{
+              padding: "10rem 2rem", textAlign: "center", border: "1px solid var(--border)",
+              background: "rgba(255,255,255,0.01)"
+            }}>
+              <h3 style={{ color: "#fff", marginBottom: "1rem", fontFamily: "var(--font-display)", fontSize: "2rem" }}>Intelligence Offline</h3>
+              <p style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: "0.7rem" }}>RESUME SESSION TO DOWNLOAD ANALYSIS</p>
+            </div>
+          )}
+        </section>
 
         {/* ── TRANSCRIPT & QUICK INSIGHTS ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "3rem" }}>
-          <div className="card" style={{ padding: "1.5rem" }}>
-            <div className="label" style={{ marginBottom: "1.25rem" }}>SESSION TRANSCRIPT</div>
-            <div style={{ maxHeight: "500px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "4rem", marginBottom: "6rem" }}>
+          <div style={{ background: "rgba(255,255,255,0.01)", padding: "2.5rem", border: "1px solid var(--border)" }}>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--accent)", fontWeight: 800, letterSpacing: "0.3em", marginBottom: "2rem" }}>SESSION_LOGS</div>
+            <div style={{ maxHeight: "600px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {txData.map((entry: any, i: number) => {
                 const entryStress = [...spikeTimestamps].some((t: any) => Math.abs(t - entry.time) < 8);
                 return (
@@ -476,42 +531,51 @@ export default function ReportPage() {
             </div>
           </div>
 
-          <div className="card" style={{ padding: "1.5rem" }}>
-            <div className="label" style={{ marginBottom: "1.25rem" }}>QUICK IMPROVEMENTS</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-              {[
-                { icon: "/eye.png", title: "Eye Contact", body: `You maintained strong gaze (${avgGaze}% avg) but dropped significantly at key technical explanations. Practice looking up when thinking.`, tone: "var(--accent)" },
-                { icon: "/microphone.png", title: "Voice Confidence", body: `Your confidence score dipped during the behavioral section. Slow down your speaking pace — rushing signals anxiety more than pausing does.`, tone: "var(--accent2)" },
-                { icon: "/palm.png", title: "Body Language", body: `${spikeCount} stress spikes detected. Try anchoring your hands on the desk to reduce visible fidgeting.`, tone: "var(--danger)" },
-                { icon: "/muscle.png", title: "Strengths", body: `Strong recovery — after each stress spike your scores returned to baseline within 10 seconds. Excellent technical delivery.`, tone: "var(--success)" },
-              ].map((item) => (
-                <div key={item.title} style={{ padding: "1rem", background: "rgba(255,255,255,0.02)", borderRadius: "10px", borderLeft: `2px solid ${item.tone}` }}>
-                  <div style={{ marginBottom: "0.4rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <CoachingIcon src={item.icon} alt={item.title} color={item.tone} />
-                    <span style={{ color: item.tone, fontSize: "0.85rem" }}>{item.title}</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: "4rem" }}>
+            <div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "var(--accent)", fontWeight: 800, letterSpacing: "0.3em", marginBottom: "2rem" }}>NEURAL_OPTIMIZATION</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+                {[
+                  { icon: "/eye.png", title: "Visual Foundation", body: `Maintained baseline gaze (${avgGaze}%) but efficiency dropped during technical spikes.`, tone: "var(--accent)" },
+                  { icon: "/microphone.png", title: "Vocal Authority", body: `Confidence micro-variations detected. Lower your pitch during conclusions.`, tone: "var(--accent)" },
+                  { icon: "/palm.png", title: "Kinetic Control", body: `Stress markers found at ${spikeCount} intervals. Reset your fidget index mid-stream.`, tone: "var(--danger)" },
+                ].map((item) => (
+                  <div key={item.title} style={{ paddingBottom: "1.5rem", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ marginBottom: "1rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "1rem", fontFamily: "var(--font-display)", letterSpacing: "0.05em", color: "#fff", fontSize: "1.25rem" }}>
+                      {item.title.toUpperCase()}
+                    </div>
+                    <p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "var(--text-dim)", fontFamily: "var(--font-body)" }}>{item.body}</p>
                   </div>
-                  <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "rgba(232,237,245,0.7)", fontFamily: "var(--font-mono)" }}>{item.body}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
         {/* ── FOOTER ACTIONS ── */}
-        <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
-          <button className="btn-ghost" onClick={handleReset} style={{ color: "var(--text)", borderColor: "var(--border)" }}>↺ New Interview</button>
+        <div style={{ display: "flex", gap: "1rem", justifyContent: "center", paddingTop: "4rem", borderTop: "1px solid var(--border)" }}>
+          <button className="btn-ghost" onClick={reset} style={{ color: "var(--text-dim)", borderColor: "var(--border)", fontFamily: "var(--font-mono)", fontSize: "0.7rem" }}>↺ / NEW_SESSION</button>
           {!urlSessionId && (
             <button
-              className="btn-primary"
               onClick={handleSave}
               disabled={isSaving}
-              style={{ background: "#00e096", boxShadow: "0 0 20px rgba(0, 224, 150, 0.25)", color: "var(--bg)" }}
+              style={{
+                background: "var(--accent)",
+                color: "#000",
+                padding: "0.75rem 2rem",
+                fontFamily: "var(--font-mono)",
+                fontSize: "0.7rem",
+                fontWeight: 800,
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 0 30px rgba(202,255,0,0.2)"
+              }}
             >
-              {isSaving ? "Saving..." : "Save to Dashboard"}
+              {isSaving ? "SYNCING..." : "SAVE_TO_CLOUD"}
             </button>
           )}
-          <button className="btn-ghost" onClick={handleExport} style={{ fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>
-            <span style={{ marginRight: "0.5rem" }}>📄</span> Export PDF
+          <button className="btn-ghost" onClick={handleExport} style={{ fontFamily: "var(--font-mono)", letterSpacing: "0.04em", fontSize: "0.7rem" }}>
+            / EXPORT_PDF
           </button>
         </div>
       </div>
