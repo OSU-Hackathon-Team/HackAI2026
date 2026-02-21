@@ -26,7 +26,7 @@ from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
 from supabase_client import supabase_logger
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from scipy.interpolate import interp1d
 import cv2
 import torch
@@ -46,7 +46,14 @@ try:
     )
     from anaylisis.engine import InterviewAnalyzerEngine
     
-    client = OpenAI()
+    sync_client = OpenAI()
+    _async_client = None
+    def get_async_client():
+        global _async_client
+        if _async_client is None:
+            _async_client = AsyncOpenAI()
+        return _async_client
+        
     analyzer_engine = InterviewAnalyzerEngine()
     print("Backend initialization successful (Models, API clients, & Analyzer ready)")
 except Exception as e:
@@ -134,6 +141,21 @@ print("Defining handlers...")
 async def heartbeat(request):
     return web.json_response({"status": "healthy", "message": "AceIt Unified Backend is live!"})
 
+import subprocess
+
+def convert_to_wav(input_path):
+    output_path = input_path.rsplit('.', 1)[0] + ".wav"
+    try:
+        # Use ffmpeg to convert to wav, 16kHz, mono
+        subprocess.run([
+            "ffmpeg", "-y", "-i", input_path, 
+            "-ar", "16000", "-ac", "1", output_path
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return output_path
+    except Exception as e:
+        logger.error(f"FFmpeg conversion failed: {e}")
+        return None
+
 async def stream_process(request):
     reader = await request.multipart()
     audio_data = None
@@ -163,7 +185,7 @@ async def stream_process(request):
 
     try:
         with open(temp_audio, "rb") as f:
-            transcription = client.audio.transcriptions.create(model="whisper-1", file=f)
+            transcription = await get_async_client().audio.transcriptions.create(model="whisper-1", file=f)
         text = transcription.text
         
         # 2. Return text to frontend ASAP
@@ -171,17 +193,43 @@ async def stream_process(request):
         # We need a copy of video_data if we want to process it in background
         async def run_metrics_background(a_path, v_data, s_id, t_sec, transcribed_text):
             try:
-                # Audio Metrics
-                y, sr = librosa.load(a_path, sr=None)
-                duration = librosa.get_duration(y=y, sr=sr)
-                word_count = len(transcribed_text.split())
-                pacing_wpm = (word_count / duration) * 60 if duration > 0 else 0
+                print(f"[DEBUG] Processing metrics for session {s_id} at {t_sec}s")
+                # Defaults
+                mean_rms = 0.05
+                pitch_stdev = 400
+                pacing_wpm = 0
+                confidence_score = 0.5
                 
-                zcr = librosa.feature.zero_crossing_rate(y)
-                active_zcr = zcr[zcr > np.median(zcr)]
-                pitch_stdev = (np.std(active_zcr) * 1000) if len(active_zcr) > 0 else 400
-                mean_rms = np.mean(librosa.feature.rms(y=y))
-                confidence_score = ((max(0.0, 1.0 - (pitch_stdev / 400.0))) * 0.4) + (min(1.0, mean_rms * 20.0) * 0.6)
+                # Audio Metrics
+                try:
+                    # Try direct load first
+                    try:
+                        y, sr = librosa.load(a_path, sr=None)
+                    except Exception:
+                        print(f"[DEBUG] Direct load failed for {a_path}, trying WAV conversion fallback...")
+                        wav_path = convert_to_wav(a_path)
+                        if wav_path and os.path.exists(wav_path):
+                            y, sr = librosa.load(wav_path, sr=None)
+                            if os.path.exists(wav_path): os.remove(wav_path)
+                        else:
+                            y = np.array([])
+                    
+                    if len(y) > 0:
+                        duration = librosa.get_duration(y=y, sr=sr)
+                        word_count = len(transcribed_text.split())
+                        pacing_wpm = (word_count / duration) * 60 if duration > 0 else 0
+                        
+                        rms_data = librosa.feature.rms(y=y)
+                        mean_rms = np.mean(rms_data) if rms_data.size > 0 else 0.05
+                        
+                        zcr = librosa.feature.zero_crossing_rate(y)
+                        active_zcr = zcr[zcr > np.median(zcr)]
+                        pitch_stdev = (np.std(active_zcr) * 1000) if len(active_zcr) > 0 else 400
+                        
+                        confidence_score = ((max(0.0, 1.0 - (pitch_stdev / 400.0))) * 0.4) + (min(1.0, mean_rms * 20.0) * 0.6)
+                        print(f"[DEBUG] Audio metrics: RMS={mean_rms:.4f}, PitchSD={pitch_stdev:.2f}, WPM={pacing_wpm:.1f}, Conf={confidence_score:.2f}")
+                except Exception as lib_err:
+                    print(f"[ERROR] Audio metrics calculation failed: {lib_err}")
 
                 # Video Metrics
                 v_conf, v_gaze, v_fidget = 0.5, 0.8, 0.1
@@ -190,8 +238,13 @@ async def stream_process(request):
                     with open(t_video, 'wb') as f: f.write(v_data)
                     try:
                         v_conf, v_gaze, v_fidget = await asyncio.to_thread(extract_video_metrics, t_video)
+                        print(f"[DEBUG] Video metrics: Gaze={v_gaze:.2f}, Fidget={v_fidget:.2f}, Conf={v_conf:.2f}")
+                    except Exception as vid_err:
+                        print(f"[ERROR] Video analysis failed: {vid_err}")
                     finally:
                         if os.path.exists(t_video): os.remove(t_video)
+                else:
+                    print(f"[DEBUG] No video data provided")
 
                 # Speech Analysis (Fillers & Tone)
                 speech_results = SpeechAnalyzer.analyze(transcribed_text)
@@ -199,6 +252,7 @@ async def stream_process(request):
                 sentiment_score = speech_results["sentiment"]
 
                 # Log to Supabase (Unified record)
+                print(f"[DEBUG] Logging Background Analysis for {s_id}")
                 supabase_logger.log_keyframe(
                     session_id=s_id,
                     timestamp_sec=t_sec,
@@ -217,6 +271,8 @@ async def stream_process(request):
                 )
             except Exception as e:
                 logger.error(f"Background metrics error: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
                 if os.path.exists(a_path): os.remove(a_path)
 
@@ -272,7 +328,7 @@ async def init_session(request):
     user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
     
     try:
-        completion = client.chat.completions.create(
+        completion = await get_async_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         )
@@ -300,6 +356,7 @@ async def chat(request):
     user_text = data.get('text', '')
     question_index = data.get('question_index', 0)
     session_id = data.get('session_id')
+    timestamp_sec = data.get('timestamp_sec', float(question_index))
     resume_text = data.get('resume_text', '')
     job_text = data.get('job_text', '')
     interviewer_persona_id = data.get('interviewer_persona', '')
@@ -339,13 +396,13 @@ async def chat(request):
     full_ai_response = ""
     try:
         # Use stream=True for token-by-token delivery
-        stream = client.chat.completions.create(
+        stream = await get_async_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
             stream=True
         )
 
-        for chunk in stream:
+        async for chunk in stream:
             if chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
                 full_ai_response += content
@@ -359,7 +416,7 @@ async def chat(request):
         if session_id:
             supabase_logger.log_keyframe(
                 session_id=session_id,
-                timestamp_sec=float(question_index),
+                timestamp_sec=float(timestamp_sec),
                 interviewer_question=f"Dynamic Question {question_index}",
                 associated_transcript=user_text,
                 ai_response=full_ai_response,
@@ -368,6 +425,8 @@ async def chat(request):
             
             async def run_analysis():
                 try:
+                    print(f"[DEBUG] Waiting for background metrics to finish for {session_id}...")
+                    await asyncio.sleep(3) # Wait for run_metrics_background to finish
                     report = await analyzer_engine.generate_report(session_id, "Standard Technical Interviewer")
                     # Save the report markdown to Supabase
                     supabase_logger.save_report(session_id, report)
@@ -389,8 +448,11 @@ async def tts(request):
     text = data.get('text', '')
     try:
         temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.mp3")
-        with client.audio.speech.with_streaming_response.create(model="tts-1", voice="nova", input=text) as response:
-            response.stream_to_file(temp_audio)
+        # Run synchronous TTS via to_thread to avoid event loop blocking
+        def _sync_tts():
+            with sync_client.audio.speech.with_streaming_response.create(model="tts-1", voice="nova", input=text) as response:
+                response.stream_to_file(temp_audio)
+        await asyncio.to_thread(_sync_tts)
         return web.FileResponse(temp_audio)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
