@@ -12,7 +12,11 @@ from aiortc.contrib.media import MediaPlayer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pc")
 
+import time
+
 async def run(pc, audio_player, video_player, server_url):
+    client_start_time = time.time() * 1000
+
     @pc.on("iceconnectionstatechange")
     async def on_iceconnectionstatechange():
         logger.info(f"ICE connection state is {pc.iceConnectionState}")
@@ -31,6 +35,12 @@ async def run(pc, audio_player, video_player, server_url):
         # We expect JSON messages from the server
         try:
             data = json.loads(message)
+            client_elapsed = (time.time() * 1000) - client_start_time
+            if "timestamp" in data:
+                # server sends its elapsed timestamp when it read the frame
+                lag_ms = client_elapsed - data["timestamp"]
+                data["estimated_lag_ms"] = round(lag_ms, 2)
+            
             logger.info(f"✅ Received from Server: {json.dumps(data, indent=2)}")
         except json.JSONDecodeError:
             logger.info(f"Received message: {message}")
