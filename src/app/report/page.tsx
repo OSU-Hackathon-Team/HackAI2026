@@ -1,8 +1,13 @@
 "use client";
+import { useRef, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth, useClerk } from "@clerk/nextjs";
 import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer, Area
 } from "recharts";
+import { useInterviewStore } from "@/store/useInterviewStore";
+import { MOCK_BIOMETRICS, MOCK_TRANSCRIPT, MOCK_SESSION } from "@/lib/mockData";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 export interface BiometricDataPoint {
@@ -11,12 +16,6 @@ export interface BiometricDataPoint {
   confidence: number;  // 0–100
   fidgetIndex: number; // 0–100 (lower = calmer)
   stressSpike?: boolean;
-}
-
-interface BiometricChartProps {
-  data: BiometricDataPoint[];
-  activeTimestamp?: number | null;
-  onChartClick?: (time: number) => void;
 }
 
 // ─── CUSTOM TOOLTIP ───────────────────────────────────────────────────────────
@@ -36,6 +35,66 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
+// ─── STAT CARD ────────────────────────────────────────────────────────────────
+function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color: string }) {
+  return (
+    <div className="card" style={{ borderLeft: `3px solid ${color}` }}>
+      <div className="label">{label}</div>
+      <div style={{ fontSize: "2.5rem", fontWeight: 800, color, lineHeight: 1.1, margin: "0.4rem 0" }}>{value}</div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.78rem", color: "var(--muted)" }}>{sub}</div>
+    </div>
+  );
+}
+
+// ─── TRANSCRIPT ROW ───────────────────────────────────────────────────────────
+function TranscriptRow({ entry, isStressZone, onJump }: {
+  entry: any;
+  isStressZone: boolean;
+  onJump: (time: number) => void;
+}) {
+  return (
+    <div
+      onClick={() => onJump(entry.time)}
+      style={{
+        display: "flex", gap: "1rem", padding: "0.75rem", borderRadius: "8px", cursor: "pointer",
+        background: isStressZone ? "rgba(255,77,109,0.05)" : "transparent",
+        border: `1px solid ${isStressZone ? "rgba(255,77,109,0.2)" : "transparent"}`,
+        transition: "all 0.15s ease",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = isStressZone ? "rgba(255,77,109,0.05)" : "transparent")}
+    >
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.75rem", color: "var(--muted)", whiteSpace: "nowrap", paddingTop: "2px" }}>
+        {String(Math.floor(entry.time / 60)).padStart(2, "0")}:{String(entry.time % 60).padStart(2, "0")}
+      </div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", fontWeight: 700, color: entry.speaker === "interviewer" ? "var(--accent)" : "var(--accent2)", paddingTop: "2px", width: "24px", flexShrink: 0 }}>
+        {entry.speaker === "interviewer" ? "AI" : "YOU"}
+      </div>
+      <p style={{ fontSize: "0.875rem", lineHeight: 1.55, color: isStressZone ? "rgba(232,237,245,0.9)" : "rgba(232,237,245,0.7)" }}>
+        {entry.text}
+        {isStressZone && <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", color: "var(--danger)" }}>⚠ stress zone</span>}
+      </p>
+    </div>
+  );
+}
+
+// ─── COACHING ICON ────────────────────────────────────────────────────────────
+function CoachingIcon({ src, alt, color }: { src: string; alt: string; color: string }) {
+  return (
+    <div style={{ width: "22px", height: "22px", flexShrink: 0 }}>
+      <div style={{ width: "100%", height: "100%", borderRadius: "4px", background: `${color}20`, border: `1px solid ${color}40`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px" }}>
+        💡
+      </div>
+    </div>
+  );
+}
+
+interface BiometricChartProps {
+  data: BiometricDataPoint[];
+  activeTimestamp: number | null;
+  onChartClick: (time: number) => void;
+}
+
 // ─── INTERNAL CHART COMPONENT ────────────────────────────────────────────────
 function InternalBiometricChart({ data, activeTimestamp, onChartClick }: BiometricChartProps) {
   const handleClick = (chartData: any) => {
@@ -115,23 +174,66 @@ function InternalBiometricChart({ data, activeTimestamp, onChartClick }: Biometr
 }
 
 // ─── MAIN REPORT PAGE ────────────────────────────────────────────────────────
-import { useState, useMemo } from "react";
-import { useInterviewStore } from "@/store/useInterviewStore";
+import { useMemo } from "react";
 import Link from "next/link";
 
 export default function ReportPage() {
-  const { biometrics, transcript, sessionId, reset } = useInterviewStore();
-  const [activeTime, setActiveTime] = useState<number | null>(null);
+  const router = useRouter();
+  const { biometrics = [], transcript = [], sessionId, reset } = useInterviewStore();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [activeTimestamp, setActiveTimestamp] = useState<number | null>(null);
 
-  const avgGaze = useMemo(() => biometrics.length ? Math.round(biometrics.reduce((a, b) => a + b.gazeScore, 0) / biometrics.length) : 0, [biometrics]);
-  const avgConf = useMemo(() => biometrics.length ? Math.round(biometrics.reduce((a, b) => a + b.confidence, 0) / biometrics.length) : 0, [biometrics]);
-  const avgCalm = useMemo(() => biometrics.length ? Math.round(100 - (biometrics.reduce((a, b) => a + b.fidgetIndex, 0) / biometrics.length)) : 0, [biometrics]);
+  // Use real store data if available, fall back to mock
+  const data = (biometrics && biometrics.length > 0) ? biometrics : MOCK_BIOMETRICS;
+  const txData = (transcript && transcript.length > 0) ? transcript : MOCK_TRANSCRIPT;
+  const session = MOCK_SESSION;
+
+  // Compute averages safely
+  const safeData = data || [];
+  const avgGaze = safeData.length > 0 ? Math.round(safeData.reduce((s, d) => s + (d.gazeScore || 0), 0) / safeData.length) : 0;
+  const avgConf = safeData.length > 0 ? Math.round(safeData.reduce((s, d) => s + (d.confidence || 0), 0) / safeData.length) : 0;
+  const avgCalm = safeData.length > 0 ? Math.round(100 - (safeData.reduce((s, d) => s + (d.fidgetIndex || 0), 0) / safeData.length)) : 100;
+  const overall = Math.round((avgGaze + avgConf + avgCalm) / 3);
+  const spikeCount = safeData.filter((d) => d.stressSpike).length;
+  const spikeTimestamps = new Set(safeData.filter((d) => d.stressSpike).map((d) => d.time));
+
+  // ── Jump to timestamp in video ──
+  const jumpToTime = (time: number) => {
+    setActiveTimestamp(time);
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+      videoRef.current.play().catch(() => { });
+    }
+    videoRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const { isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
+
+  const requireAuth = (action: () => void) => {
+    if (isSignedIn) {
+      action();
+    } else {
+      openSignIn({ afterSignInUrl: "/dashboard" });
+    }
+  };
+
+  const handleReset = () => requireAuth(() => {
+    reset();
+    router.push("/upload");
+  });
+
+  const handleExport = () => requireAuth(() => {
+    window.print();
+  });
+
+  // Determine score color
+  const scoreColor = overall >= 80 ? "var(--success)" : overall >= 60 ? "var(--accent)" : "var(--danger)";
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", padding: "2rem" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-
-        {/* Header */}
+        {/* ── HEADER ── */}
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "3rem" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
@@ -139,112 +241,77 @@ export default function ReportPage() {
                 ← BACK TO HOME
               </Link>
             </div>
-            <h1 style={{ fontSize: "2.5rem", fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)" }}>Interview Report</h1>
+            <h1 style={{ fontSize: "clamp(1.8rem, 4vw, 3rem)", fontWeight: 800, letterSpacing: "-0.02em", color: "var(--text)" }}>
+              {session.role} Report
+            </h1>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem", color: "var(--muted)", marginTop: "0.5rem" }}>
-              SESSION ID: <span style={{ color: "var(--accent)" }}>{sessionId || "DEMO_UNITS"}</span>
+              SESSION ID: <span style={{ color: "var(--accent)" }}>{sessionId || "DEMO_UNITS"}</span> · {session.company} · {session.date}
             </p>
           </div>
           <div style={{ display: "flex", gap: "1.5rem" }}>
             <div className="card" style={{ padding: "1rem 1.5rem", textAlign: "center", minWidth: "120px" }}>
               <div style={{ fontSize: "0.65rem", color: "var(--muted)", fontWeight: 700, letterSpacing: "0.1em", marginBottom: "0.25rem" }}>OVERALL SCORE</div>
-              <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)" }}>{Math.round((avgGaze + avgConf + avgCalm) / 3)}%</div>
+              <div style={{ fontSize: "1.5rem", fontWeight: 800, color: scoreColor }}>{overall}%</div>
             </div>
           </div>
         </header>
 
-        {/* Stats Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1.5rem", marginBottom: "2rem" }}>
-          <div className="card" style={{ padding: "1.5rem" }}>
-            <div className="label" style={{ marginBottom: "0.75rem" }}>AVERAGE GAZE</div>
-            <div style={{ fontSize: "2rem", fontWeight: 800, color: "var(--text)" }}>{avgGaze}%</div>
-            <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px", marginTop: "1rem" }}>
-              <div style={{ width: `${avgGaze}%`, height: "100%", background: "var(--accent)", borderRadius: "2px" }} />
-            </div>
-          </div>
-          <div className="card" style={{ padding: "1.5rem" }}>
-            <div className="label" style={{ marginBottom: "0.75rem" }}>AVG CONFIDENCE</div>
-            <div style={{ fontSize: "2rem", fontWeight: 800, color: "var(--text)" }}>{avgConf}%</div>
-            <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px", marginTop: "1rem" }}>
-              <div style={{ width: `${avgConf}%`, height: "100%", background: "var(--accent2)", borderRadius: "2px" }} />
-            </div>
-          </div>
-          <div className="card" style={{ padding: "1.5rem" }}>
-            <div className="label" style={{ marginBottom: "0.75rem" }}>COMPOSURE</div>
-            <div style={{ fontSize: "2rem", fontWeight: 800, color: "var(--text)" }}>{avgCalm}%</div>
-            <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px", marginTop: "1rem" }}>
-              <div style={{ width: `${avgCalm}%`, height: "100%", background: "var(--success)", borderRadius: "2px" }} />
-            </div>
-          </div>
+        {/* ── STAT CARDS ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1.5rem", marginBottom: "2rem" }}>
+          <StatCard label="GAZE STABILITY" value={`${avgGaze}%`} sub="avg across session" color="var(--accent)" />
+          <StatCard label="VOICE CONFIDENCE" value={`${avgConf}%`} sub="tone & pacing" color="var(--accent2)" />
+          <StatCard label="COMPOSURE" value={`${avgCalm}%`} sub="low fidget index" color="var(--success)" />
+          <StatCard label="STRESS SPIKES" value={`${spikeCount}`} sub="moments flagged" color="var(--danger)" />
         </div>
 
-        {/* Chart Section */}
-        <InternalBiometricChart data={biometrics} activeTimestamp={activeTime} onChartClick={setActiveTime} />
+        {/* ── BIOMETRIC CHART ── */}
+        <InternalBiometricChart data={safeData} activeTimestamp={activeTimestamp} onChartClick={jumpToTime} />
 
-        {/* Detailed Analysis Split */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
-
-          {/* Transcript */}
-          <div className="card" style={{ padding: "1.5rem", display: "flex", flexDirection: "column", maxHeight: "600px" }}>
+        {/* ── VIDEO + TRANSCRIPT ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
+          <div className="card" style={{ padding: "1.5rem" }}>
             <div className="label" style={{ marginBottom: "1.25rem" }}>SESSION TRANSCRIPT</div>
-            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {transcript.map((entry, i) => (
-                <div
-                  key={i}
-                  onClick={() => setActiveTime(entry.time)}
-                  style={{
-                    padding: "0.75rem",
-                    borderRadius: "8px",
-                    background: activeTime === entry.time ? "rgba(255,255,255,0.03)" : "transparent",
-                    cursor: "pointer",
-                    transition: "background 0.2s ease"
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem" }}>
-                    <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)", fontWeight: 800, color: entry.speaker === "interviewer" ? "var(--accent)" : "var(--accent2)" }}>
-                      {entry.speaker.toUpperCase()}
-                    </span>
-                    <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{entry.time}s</span>
+            <div style={{ maxHeight: "500px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+              {txData.map((entry, i) => {
+                const entryStress = [...spikeTimestamps].some(t => Math.abs(t - entry.time) < 8);
+                return (
+                  <TranscriptRow
+                    key={i}
+                    entry={entry}
+                    isStressZone={entryStress}
+                    onJump={jumpToTime}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: "1.5rem" }}>
+            <div className="label" style={{ marginBottom: "1.25rem" }}>AI COACHING INSIGHTS</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+              {[
+                { icon: "/eye.png", title: "Eye Contact", body: `You maintained strong gaze (${avgGaze}% avg) but dropped significantly at key technical explanations. Practice looking up when thinking.`, tone: "var(--accent)" },
+                { icon: "/microphone.png", title: "Voice Confidence", body: `Your confidence score dipped during the behavioral section. Slow down your speaking pace — rushing signals anxiety more than pausing does.`, tone: "var(--accent2)" },
+                { icon: "/palm.png", title: "Body Language", body: `${spikeCount} stress spikes detected. Try anchoring your hands on the desk to reduce visible fidgeting.`, tone: "var(--danger)" },
+                { icon: "/muscle.png", title: "Strengths", body: `Strong recovery — after each stress spike your scores returned to baseline within 10 seconds. Excellent technical delivery.`, tone: "var(--success)" },
+              ].map((item) => (
+                <div key={item.title} style={{ padding: "1rem", background: "rgba(255,255,255,0.02)", borderRadius: "10px", borderLeft: `2px solid ${item.tone}` }}>
+                  <div style={{ marginBottom: "0.4rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <CoachingIcon src={item.icon} alt={item.title} color={item.tone} />
+                    <span style={{ color: item.tone, fontSize: "0.85rem" }}>{item.title}</span>
                   </div>
-                  <p style={{ fontSize: "0.85rem", lineHeight: 1.5, color: activeTime === entry.time ? "var(--text)" : "rgba(232,237,245,0.8)" }}>
-                    {entry.text}
-                  </p>
+                  <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "rgba(232,237,245,0.7)", fontFamily: "var(--font-mono)" }}>{item.body}</p>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* AI Feedback Placeholder */}
-          <div className="card" style={{ padding: "1.5rem" }}>
-            <div className="label" style={{ marginBottom: "1.25rem" }}>AI COACHING REPORT</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-              <div style={{ padding: "1rem", borderRadius: "10px", background: "rgba(0,229,255,0.05)", border: "1px solid rgba(0,229,255,0.1)" }}>
-                <p style={{ fontSize: "0.85rem", lineHeight: 1.6, color: "rgba(232,237,245,0.9)" }}>
-                  Our AI is currently finalizing your comprehensive report. Check your server terminal for the full deep-dive analysis!
-                </p>
-                <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  <div style={{ height: "8px", width: "100%", background: "rgba(255,255,255,0.03)", borderRadius: "4px" }} />
-                  <div style={{ height: "8px", width: "90%", background: "rgba(255,255,255,0.03)", borderRadius: "4px" }} />
-                  <div style={{ height: "8px", width: "40%", background: "rgba(255,255,255,0.03)", borderRadius: "4px" }} />
-                </div>
-              </div>
-
-              <div>
-                <h4 style={{ fontSize: "0.8rem", fontWeight: 700, marginBottom: "0.75rem", letterSpacing: "0.05em" }}>KEY IMPROVEMENTS</h4>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                  <div style={{ borderLeft: "2px solid var(--accent)", paddingLeft: "1rem" }}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, marginBottom: "0.2rem" }}>EYE CONTACT</div>
-                    <p style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Maintain steady gaze when answering technical questions.</p>
-                  </div>
-                  <div style={{ borderLeft: "2px solid var(--accent2)", paddingLeft: "1rem" }}>
-                    <div style={{ fontSize: "0.75rem", fontWeight: 700, marginBottom: "0.2rem" }}>VERBAL CONFIDENCE</div>
-                    <p style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Try to reduce filler words when explaining complex architectural choices.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
+        {/* ── FOOTER ACTIONS ── */}
+        <div style={{ display: "flex", gap: "1rem", justifyContent: "center" }}>
+          <button className="btn-primary" onClick={handleReset}>↺ New Interview</button>
+          <button className="btn-ghost" onClick={handleExport}>Export Report</button>
+        </div>
       </div>
     </div>
   );

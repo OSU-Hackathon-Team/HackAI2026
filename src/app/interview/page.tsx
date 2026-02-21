@@ -518,6 +518,7 @@ export default function InterviewPage() {
     setIsRecording(false);
   };
 
+
   // ── Start timer + interview when camera or mic first turns on ─────────────
   const maybeStartInterview = () => {
     if (interviewStartedRef.current) return;
@@ -744,7 +745,7 @@ export default function InterviewPage() {
       <header style={{ borderBottom: "1px solid var(--border)", padding: "1rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger)" }} className="pulse-ring" />
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger)" }} />
             <span className="label" style={{ color: "var(--danger)" }}>LIVE SESSION</span>
           </div>
           <ConnectionBadge status={connStatus} />
