@@ -88,7 +88,7 @@ export default function TestAudioPage() {
                 const chatRes = await fetch('http://127.0.0.1:5000/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: streamData.text, question_index: questionIndex }),
+                    body: JSON.stringify({ text: streamData.text, question_index: questionIndex, session_id: sessionId }),
                 });
                 const chatData = await chatRes.json();
 
@@ -143,8 +143,8 @@ export default function TestAudioPage() {
                     <button
                         onClick={isRecording ? stopRecording : startRecording}
                         className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl ${isRecording
-                                ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 ring-4 ring-red-500/50 animate-pulse'
-                                : 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 hover:scale-105 ring-4 ring-emerald-500/50'
+                            ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30 ring-4 ring-red-500/50 animate-pulse'
+                            : 'bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/30 hover:scale-105 ring-4 ring-emerald-500/50'
                             }`}
                     >
                         {isRecording ? <Square size={48} className="fill-current" /> : <Mic size={48} />}

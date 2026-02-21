@@ -1,3 +1,7 @@
+-- Drop existing schema if it exists to cleanly recreate it
+drop table if exists public.interview_keyframes cascade;
+drop type if exists keyframe_severity cascade;
+
 -- Create an enum for the keyframe severity (optional, but useful for filtering)
 create type keyframe_severity as enum ('critical', 'warning', 'positive', 'neutral');
 

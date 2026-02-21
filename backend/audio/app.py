@@ -99,6 +99,17 @@ def chat():
             ]
         )
         ai_response = completion.choices[0].message.content
+        
+        session_id = data.get('session_id')
+        if session_id:
+            supabase_logger.log_keyframe(
+                session_id=session_id,
+                timestamp_sec=float(question_index),
+                keyframe_reason=f"Chat QA - Q{question_index + 1}",
+                associated_transcript=f"Candidate: {user_text}\nAI: {ai_response}",
+                severity="neutral"
+            )
+
         return jsonify({
             "ai_response": ai_response,
             "next_index": next_index,
