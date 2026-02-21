@@ -233,7 +233,7 @@ export default function DashboardPage() {
         </Link>
         <div style={{ display: "flex", gap: "2rem", alignItems: "center" }}>
           <span style={{ fontSize: "0.72rem", fontFamily: "DM Mono, monospace", color: "#5a6a82", letterSpacing: "0.06em" }}>DASHBOARD</span>
-          <Link href="/upload" className="btn-primary" style={{ fontSize: "0.82rem", padding: "0.55rem 1.1rem" }}>
+          <Link href="/interviewer-selection" className="btn-primary" style={{ fontSize: "0.82rem", padding: "0.55rem 1.1rem" }}>
             + New Interview
           </Link>
           <UserButton afterSignOutUrl="/" />
@@ -279,7 +279,7 @@ export default function DashboardPage() {
               Upload a new resume or job description and start practicing in seconds.
             </p>
           </div>
-          <Link href="/upload" className="btn-primary">
+          <Link href="/interviewer-selection" className="btn-primary">
             Start Interview →
           </Link>
         </div>

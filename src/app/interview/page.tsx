@@ -277,7 +277,7 @@ export default function InterviewPage() {
     updateLastTranscriptText,
     liveAlert, setLiveAlert,
     startInterview,
-    sessionId, resumeText, jobText
+    sessionId, resumeText, jobText, interviewerPersona
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -349,7 +349,8 @@ export default function InterviewPage() {
             question_index: questionIndex,
             session_id: sessionId,
             resume_text: resumeText,
-            job_text: jobText
+            job_text: jobText,
+            interviewer_persona: interviewerPersona
           }),
         });
 

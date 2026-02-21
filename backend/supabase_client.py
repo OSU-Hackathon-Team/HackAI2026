@@ -1,5 +1,6 @@
 import os
-from supabase import create_client, Client
+import importlib
+from typing import Any, Optional
 from dotenv import load_dotenv
 import logging
 
@@ -14,10 +15,12 @@ class SupabaseLogger:
         
         if not url or not key:
             logger.warning("SUPABASE_URL or SUPABASE_KEY not found in environment variables. Real-time logging will be disabled.")
-            self.supabase: Client = None
+            self.supabase: Optional[Any] = None
         else:
             try:
-                self.supabase: Client = create_client(url, key)
+                supabase_module = importlib.import_module("supabase")
+                create_client = getattr(supabase_module, "create_client")
+                self.supabase: Any = create_client(url, key)
                 logger.info("Supabase client successfully initialized.")
             except Exception as e:
                 logger.error(f"Failed to initialize Supabase client: {e}")

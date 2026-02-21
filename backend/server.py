@@ -232,6 +232,7 @@ async def init_session(request):
     reader = await request.multipart()
     resume_text = ""
     job_description = ""
+    interviewer_persona_id = ""
     
     while True:
         part = await reader.next()
@@ -245,9 +246,20 @@ async def init_session(request):
                 resume_text = content.decode('utf-8', errors='ignore')
         elif part.name == 'job_description':
             job_description = (await part.read()).decode('utf-8')
+        elif part.name == 'interviewer_persona':
+            interviewer_persona_id = (await part.read()).decode('utf-8')
+
+    # Load persona prompt
+    persona_prompt = "You are an expert AI Interviewer."
+    if interviewer_persona_id:
+        persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
+        if os.path.exists(persona_path):
+            with open(persona_path, 'r') as f:
+                persona_prompt = f.read()
 
     system_prompt = (
-        "You are an expert AI Interviewer. Based on the candidate's resume and the job description, "
+        f"{persona_prompt}\n\n"
+        "Based on the candidate's resume and the job description, "
         "introduce yourself briefly and ask the first most relevant interview question. "
         "Keep it professional and concise (under 3 sentences)."
     )
@@ -281,9 +293,18 @@ async def chat(request):
     session_id = data.get('session_id')
     resume_text = data.get('resume_text', '')
     job_text = data.get('job_text', '')
+    interviewer_persona_id = data.get('interviewer_persona', '')
+
+    # Load persona prompt
+    persona_prompt = "You are a professional technical interviewer for AceIt."
+    if interviewer_persona_id:
+        persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
+        if os.path.exists(persona_path):
+            with open(persona_path, 'r') as f:
+                persona_prompt = f.read()
 
     system_prompt = (
-        "You are a professional technical interviewer for AceIt. "
+        f"{persona_prompt}\n\n"
         "Keep your response concise, encouraging, and under 3 sentences. "
         "First, react to the candidate's answer in exactly 1 sentence. "
         f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}..."

@@ -6,7 +6,7 @@ import Link from "next/link";
 
 export default function UploadPage() {
   const router = useRouter();
-  const { setResumeText, setJobText, setPhase, setSessionId, addTranscriptEntry } = useInterviewStore();
+  const { setResumeText, setJobText, setPhase, setSessionId, addTranscriptEntry, interviewerPersona } = useInterviewStore();
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [jobText, setJobTextLocal] = useState("");
@@ -36,6 +36,9 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append("resume", resumeFile);
       formData.append("job_description", jobText);
+      if (interviewerPersona) {
+        formData.append("interviewer_persona", interviewerPersona);
+      }
 
       const res = await fetch("http://127.0.0.1:8080/api/init-session", {
         method: "POST",
