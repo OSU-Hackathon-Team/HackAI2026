@@ -155,59 +155,70 @@ async def stream_process(request):
     if not audio_data:
         return web.json_response({"error": "No audio provided"}, status=400)
 
-    # Save audio to temp file
+    # 1. Transcribe immediately
     temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.webm")
     with open(temp_audio, 'wb') as f:
         f.write(audio_data)
 
     try:
-        # 1. Transcribe
         with open(temp_audio, "rb") as f:
             transcription = client.audio.transcriptions.create(model="whisper-1", file=f)
         text = transcription.text
-        word_count = len(text.split())
-
-        # 2. Audio Metrics
-        y, sr = librosa.load(temp_audio, sr=None)
-        duration = librosa.get_duration(y=y, sr=sr)
-        pacing_wpm = (word_count / duration) * 60 if duration > 0 else 0
-        pacing_score = min(1.0, pacing_wpm / 200.0)
-
-        zcr = librosa.feature.zero_crossing_rate(y)
-        active_zcr = zcr[zcr > np.median(zcr)]
-        pitch_stdev = (np.std(active_zcr) * 1000) if len(active_zcr) > 0 else 400
-        pitch_score = max(0.0, 1.0 - (pitch_stdev / 400.0))
-        mean_rms = np.mean(librosa.feature.rms(y=y))
-        energy_score = min(1.0, mean_rms * 20.0)
-        confidence_score = (pitch_score * 0.4) + (energy_score * 0.6)
-
-        # 3. Video Metrics
-        v_conf, v_gaze, v_fidget = 0.5, 0.8, 0.1
-        if video_data:
-            temp_video = os.path.join(tempfile.gettempdir(), f"v_{uuid.uuid4().hex}.webm")
-            with open(temp_video, 'wb') as f: f.write(video_data)
+        
+        # 2. Return text to frontend ASAP
+        # We start a background task for the heavy biometrics
+        # We need a copy of video_data if we want to process it in background
+        async def run_metrics_background(a_path, v_data, s_id, t_sec, transcribed_text):
             try:
-                v_conf, v_gaze, v_fidget = await asyncio.to_thread(extract_video_metrics, temp_video)
-            finally:
-                if os.path.exists(temp_video): os.remove(temp_video)
+                # Audio Metrics
+                y, sr = librosa.load(a_path, sr=None)
+                duration = librosa.get_duration(y=y, sr=sr)
+                word_count = len(transcribed_text.split())
+                pacing_wpm = (word_count / duration) * 60 if duration > 0 else 0
+                
+                zcr = librosa.feature.zero_crossing_rate(y)
+                active_zcr = zcr[zcr > np.median(zcr)]
+                pitch_stdev = (np.std(active_zcr) * 1000) if len(active_zcr) > 0 else 400
+                mean_rms = np.mean(librosa.feature.rms(y=y))
+                confidence_score = ((max(0.0, 1.0 - (pitch_stdev / 400.0))) * 0.4) + (min(1.0, mean_rms * 20.0) * 0.6)
 
-        return web.json_response({
-            "text": text,
-            "metrics": {
-                "pacing_wpm": float(pacing_wpm),
-                "pacing_score": float(pacing_score),
-                "confidence_score": float(confidence_score),
-                "word_count": word_count,
-                "duration_seconds": float(duration),
-                "v_conf": float(v_conf),
-                "v_gaze": float(v_gaze),
-                "v_fidget": float(v_fidget),
-                "volume_rms": float(mean_rms),
-                "pitch_stdev": float(pitch_stdev)
-            }
-        })
-    finally:
+                # Video Metrics
+                v_conf, v_gaze, v_fidget = 0.5, 0.8, 0.1
+                if v_data:
+                    t_video = os.path.join(tempfile.gettempdir(), f"v_{uuid.uuid4().hex}.webm")
+                    with open(t_video, 'wb') as f: f.write(v_data)
+                    try:
+                        v_conf, v_gaze, v_fidget = await asyncio.to_thread(extract_video_metrics, t_video)
+                    finally:
+                        if os.path.exists(t_video): os.remove(t_video)
+
+                # Log to Supabase (Unified record)
+                supabase_logger.log_keyframe(
+                    session_id=s_id,
+                    timestamp_sec=t_sec,
+                    associated_transcript=transcribed_text,
+                    volume_rms=float(mean_rms),
+                    pitch_stdev=float(pitch_stdev),
+                    pacing_wpm=float(pacing_wpm),
+                    is_audibly_confident=confidence_score >= 0.5,
+                    gaze_score=float(v_gaze),
+                    fidget_index=float(v_fidget),
+                    is_visually_confident=v_conf >= 0.5,
+                    overall_confidence_score=float(confidence_score),
+                    keyframe_reason="Background Analysis"
+                )
+            except Exception as e:
+                logger.error(f"Background metrics error: {e}")
+            finally:
+                if os.path.exists(a_path): os.remove(a_path)
+
+        # Fire and forget
+        asyncio.create_task(run_metrics_background(temp_audio, video_data, session_id, timestamp_sec, text))
+
+        return web.json_response({"text": text})
+    except Exception as e:
         if os.path.exists(temp_audio): os.remove(temp_audio)
+        return web.json_response({"error": str(e)}, status=500)
 
 async def init_session(request):
     reader = await request.multipart()
@@ -264,12 +275,14 @@ async def init_session(request):
         return web.json_response({"error": str(e)}, status=500)
 
 async def chat(request):
-    data = await request.json()
+    try:
+        data = await request.json()
+    except:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+
     user_text = data.get('text', '')
     question_index = data.get('question_index', 0)
     session_id = data.get('session_id')
-    metrics = data.get('metrics', {})
-
     resume_text = data.get('resume_text', '')
     job_text = data.get('job_text', '')
     interviewer_persona_id = data.get('interviewer_persona', '')
@@ -289,8 +302,8 @@ async def chat(request):
         f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}..."
     )
     
-    if question_index < 5: # Limit to 5 dynamic questions for now
-        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then ask a relevant follow-up question based on the JD and Resume provided."
+    if question_index < 5:
+        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then ask a relevant follow-up question."
         is_finished = False
         next_index = question_index + 1
     else:
@@ -298,34 +311,44 @@ async def chat(request):
         is_finished = True
         next_index = question_index
 
+    # Prepare SSE response
+    response = web.StreamResponse(
+        status=200,
+        reason='OK',
+        headers={'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache'}
+    )
+    await response.prepare(request)
+
+    full_ai_response = ""
     try:
-        completion = client.chat.completions.create(
+        # Use stream=True for token-by-token delivery
+        stream = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}]
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+            stream=True
         )
-        ai_response = completion.choices[0].message.content
-        
+
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                full_ai_response += content
+                # SSE Format: data: <payload>\n\n
+                await response.write(f"data: {json.dumps({'token': content})}\n\n".encode())
+
+        # Send metadata at the end
+        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
+
+        # Log to Supabase and trigger analysis in the background after stream
         if session_id:
-            # Use a dummy question text for logging if it's dynamic
-            q_text = f"Dynamic Question {question_index}" 
             supabase_logger.log_keyframe(
                 session_id=session_id,
                 timestamp_sec=float(question_index),
-                interviewer_question=q_text,
+                interviewer_question=f"Dynamic Question {question_index}",
                 associated_transcript=user_text,
-                ai_response=ai_response,
-                volume_rms=metrics.get('volume_rms'),
-                pitch_stdev=metrics.get('pitch_stdev'),
-                pacing_wpm=metrics.get('pacing_wpm'),
-                is_audibly_confident=metrics.get('confidence_score', 0) >= 0.5,
-                gaze_score=metrics.get('v_gaze'),
-                fidget_index=metrics.get('v_fidget'),
-                is_visually_confident=metrics.get('v_conf', 0) >= 0.5,
-                overall_confidence_score=metrics.get('confidence_score'),
-                keyframe_reason=f"Unified Turn - Q{question_index + 1}"
+                ai_response=full_ai_response,
+                keyframe_reason=f"AI Turn - Q{question_index + 1}"
             )
             
-            # Trigger background analysis
             async def run_analysis():
                 try:
                     report = await analyzer_engine.generate_report(session_id, "Standard Technical Interviewer")
@@ -335,9 +358,12 @@ async def chat(request):
             
             asyncio.create_task(run_analysis())
 
-        return web.json_response({"ai_response": ai_response, "next_index": next_index, "is_finished": is_finished})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        logger.error(f"Chat Stream Error: {e}")
+        await response.write(f"data: {json.dumps({'error': str(e)})}\n\n".encode())
+    
+    await response.write_eof()
+    return response
 
 async def tts(request):
     data = await request.json()
@@ -350,26 +376,6 @@ async def tts(request):
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
-async def offer(request):
-    """
-    WebRTC Offer Endpoint: /api/offer
-    
-    How to use:
-    1. The client (frontend) should create an RTCPeerConnection and add their webcam
-       video and audio tracks to it. Give the frontend audio and video media streams.
-    2. The client generates an SDP offer and sends it via POST request to this endpoint
-       with a JSON payload containing `sdp` and `type` fields.
-    3. The server processes the offer, sets up listeners for incoming media tracks,
-       creates an SDP answer, and returns it to the client.
-    4. The client applies the SDP answer to establish the WebRTC connection.
-    5. The server will receive the video/audio streams on the 'track' event.
-
-    Example JSON payload from client:
-    {
-        "sdp": "v=0\r\no=- 4209 ...",
-        "type": "offer"
-    }
-    """
 async def offer(request):
     try:
         params = await request.json()

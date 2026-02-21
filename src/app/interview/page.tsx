@@ -230,12 +230,51 @@ function ConnectionBadge({ status }: { status: "connecting" | "connected" | "fai
   );
 }
 
+// ─── AUDIO QUEUE HELPER ──────────────────────────────────────────────────────
+class AudioQueue {
+  private queue: string[] = [];
+  private isPlaying = false;
+  private onEnd: () => void;
+  private audio: HTMLAudioElement | null = null;
+
+  constructor(onEnd: () => void) {
+    this.onEnd = onEnd;
+  }
+
+  add(url: string) {
+    this.queue.push(url);
+    if (!this.isPlaying) this.playNext();
+  }
+
+  private playNext() {
+    if (this.queue.length === 0) {
+      this.isPlaying = false;
+      this.onEnd();
+      return;
+    }
+    this.isPlaying = true;
+    this.audio = new Audio(this.queue.shift());
+    this.audio.onended = () => this.playNext();
+    this.audio.play().catch(e => console.error("Audio playback failed", e));
+  }
+
+  stop() {
+    if (this.audio) {
+      this.audio.pause();
+      this.audio = null;
+    }
+    this.queue = [];
+    this.isPlaying = false;
+  }
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function InterviewPage() {
   const router = useRouter();
   const {
     phase, setPhase, finishInterview,
     transcript, addTranscriptEntry, addBiometricPoint,
+    updateLastTranscriptText,
     liveAlert, setLiveAlert,
     startInterview,
     sessionId, resumeText, jobText, interviewerPersona
@@ -268,14 +307,22 @@ export default function InterviewPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const videoChunksRef = useRef<Blob[]>([]);
 
+  const audioQueueRef = useRef<AudioQueue | null>(null);
+
   // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
   const processTurn = async (audioBlob: Blob | null, videoBlob: Blob | null) => {
     if (!sessionId) return;
     if (!audioBlob) {
-      alert("No audio recorded. Please ensure your microphone is enabled and try again.");
+      alert("No audio recorded.");
       return;
     }
+
     setIsProcessing(true);
+    if (!audioQueueRef.current) {
+      audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false));
+    }
+    audioQueueRef.current.stop();
+
     try {
       // 1. Send to stream-process
       const formData = new FormData();
@@ -293,7 +340,7 @@ export default function InterviewPage() {
       if (streamData.text) {
         addTranscriptEntry({ time: elapsedSeconds, speaker: 'user', text: streamData.text });
 
-        // 2. Chat for next question
+        // 2. Chat for next question (STREAMING)
         const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -301,29 +348,77 @@ export default function InterviewPage() {
             text: streamData.text,
             question_index: questionIndex,
             session_id: sessionId,
-            metrics: streamData.metrics,
             resume_text: resumeText,
             job_text: jobText,
             interviewer_persona: interviewerPersona
           }),
         });
-        const chatData = await chatRes.json();
 
-        if (chatData.ai_response) {
-          setIsSpeaking(true);
-          addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text: chatData.ai_response });
-          setQuestionIndex(chatData.next_index);
+        if (!chatRes.body) return;
+        const reader = chatRes.body.getReader();
+        const decoder = new TextDecoder();
 
-          // 3. TTS
-          const ttsRes = await fetch('http://127.0.0.1:8080/api/tts', {
+        addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text: "" });
+
+        let sentenceBuffer = "";
+        let doneMetadata: any = null;
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.slice(6));
+              if (data.token) {
+                updateLastTranscriptText(data.token);
+                sentenceBuffer += data.token;
+
+                // Trigger TTS for each complete sentence
+                if (/[.!?]$/.test(sentenceBuffer.trim())) {
+                  const fragment = sentenceBuffer.trim();
+                  sentenceBuffer = ""; // Clear for next fragment
+
+                  setIsSpeaking(true);
+                  fetch('http://127.0.0.1:8080/api/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: fragment }),
+                  }).then(r => r.blob()).then(blob => {
+                    if (audioQueueRef.current) {
+                      audioQueueRef.current.add(URL.createObjectURL(blob));
+                    }
+                  });
+                }
+              } else if (data.done) {
+                doneMetadata = data;
+              }
+            }
+          }
+        }
+
+        // Final tail fragment if it didn't end with punctuation
+        if (sentenceBuffer.trim().length > 0) {
+          const fragment = sentenceBuffer.trim();
+          fetch('http://127.0.0.1:8080/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: chatData.ai_response }),
+            body: JSON.stringify({ text: fragment }),
+          }).then(r => r.blob()).then(blob => {
+            if (audioQueueRef.current) {
+              audioQueueRef.current.add(URL.createObjectURL(blob));
+            }
           });
-          const ttsBlob = await ttsRes.blob();
-          const audio = new Audio(URL.createObjectURL(ttsBlob));
-          audio.onended = () => setIsSpeaking(false);
-          audio.play();
+        }
+
+        if (doneMetadata) {
+          setQuestionIndex(doneMetadata.next_index);
+          if (doneMetadata.is_finished) {
+            setTimeout(() => finishInterview(), 2000);
+          }
         }
       }
     } catch (err) {

@@ -28,10 +28,10 @@ class SupabaseLogger:
 
     def log_keyframe(self, session_id: str, timestamp_sec: float, **kwargs):
         """
-        Asynchronously log keyframes to Supabase.
+        Asynchronously log keyframes to Supabase. Returns the logged data (including ID).
         """
         if not self.supabase:
-            return
+            return None
 
         payload = {
             "session_id": session_id,
@@ -40,8 +40,22 @@ class SupabaseLogger:
         payload.update(kwargs)
 
         try:
-            self.supabase.table("interview_keyframes").insert(payload).execute()
+            response = self.supabase.table("interview_keyframes").insert(payload).execute()
+            return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Failed to flush keyframe to Supabase: {e}")
+            return None
+
+    def update_keyframe(self, keyframe_id: int, **kwargs):
+        """
+        Update an existing keyframe with late-arriving metrics (e.g. from background tasks).
+        """
+        if not self.supabase or not keyframe_id:
+            return
+
+        try:
+            self.supabase.table("interview_keyframes").update(kwargs).eq("id", keyframe_id).execute()
+        except Exception as e:
+            logger.error(f"Failed to update keyframe {keyframe_id}: {e}")
 
 supabase_logger = SupabaseLogger()
