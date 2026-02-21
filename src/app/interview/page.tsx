@@ -27,23 +27,42 @@ function ScoreRing({ label, value, color }: { label: string; value: number; colo
   );
 }
 
-// ─── AVATAR PLACEHOLDER ───────────────────────────────────────────────────────
-function AvatarPlaceholder({ isSpeaking }: { isSpeaking: boolean }) {
+// ─── AI AVATAR PANEL (top half) ───────────────────────────────────────────────
+function AvatarPanel({ isSpeaking }: { isSpeaking: boolean }) {
   return (
-    <div style={{ position: "relative", width: "100%", aspectRatio: "4/3", background: "linear-gradient(135deg, #0e1e35 0%, #0a1525 100%)", borderRadius: "12px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", border: "1px solid var(--border)" }}>
+    <div style={{ position: "relative", width: "100%", flex: 1, background: "linear-gradient(135deg, #0e1e35 0%, #0a1525 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
-      <div style={{ position: "relative", width: "120px", height: "120px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent2), var(--accent))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "3rem", boxShadow: isSpeaking ? "0 0 40px rgba(0,229,255,0.4)" : "0 0 20px rgba(0,229,255,0.1)", transition: "box-shadow 0.3s ease" }}>
+      <div style={{ position: "relative", width: "100px", height: "100px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent2), var(--accent))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem", boxShadow: isSpeaking ? "0 0 40px rgba(0,229,255,0.4)" : "0 0 20px rgba(0,229,255,0.1)", transition: "box-shadow 0.3s ease" }}>
         🤖
         {isSpeaking && (
           <div style={{ position: "absolute", inset: "-8px", borderRadius: "50%", border: "2px solid var(--accent)", animation: "pulse-ring 1.5s ease-out infinite" }} />
         )}
       </div>
-      <div style={{ marginTop: "1rem", fontWeight: 600, letterSpacing: "0.05em" }}>AI Interviewer</div>
-      <div className="label" style={{ marginTop: "0.25rem", color: isSpeaking ? "var(--accent)" : "var(--muted)" }}>
+      <div style={{ marginTop: "0.75rem", fontWeight: 600, letterSpacing: "0.05em", position: "relative" }}>AI Interviewer</div>
+      <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--accent)" : "var(--muted)" }}>
         {isSpeaking ? "● SPEAKING" : "LISTENING"}
       </div>
-      <div className="label" style={{ position: "absolute", bottom: "1rem", opacity: 0.4 }}>
+      <div className="label" style={{ position: "absolute", bottom: "0.75rem", opacity: 0.4 }}>
         [ 3D Avatar — Three.js / TalkingHead ]
+      </div>
+    </div>
+  );
+}
+
+// ─── USER CAMERA PANEL (bottom half) ─────────────────────────────────────────
+function CameraPanel({ videoRef }: { videoRef: React.RefObject<HTMLVideoElement> }) {
+  return (
+    <div style={{ position: "relative", width: "100%", flex: 1, background: "#000", overflow: "hidden" }}>
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)", display: "block" }}
+      />
+      <div style={{ position: "absolute", bottom: "0.75rem", left: "0.75rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+        <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--danger)" }} />
+        <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)", color: "rgba(255,255,255,0.7)", letterSpacing: "0.08em" }}>YOU</span>
       </div>
     </div>
   );
@@ -52,95 +71,42 @@ function AvatarPlaceholder({ isSpeaking }: { isSpeaking: boolean }) {
 // ─── COUNTDOWN OVERLAY ────────────────────────────────────────────────────────
 function CountdownOverlay({ countdown }: { countdown: number }) {
   const isGoodLuck = countdown === 0;
-
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 50,
-      backdropFilter: "blur(12px)",
-      WebkitBackdropFilter: "blur(12px)",
-      background: "rgba(8, 11, 18, 0.75)",
-      display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center",
-      gap: "1.5rem",
-      transition: "opacity 0.4s ease",
-    }}>
-      <div style={{
-        position: "absolute",
-        width: "400px", height: "400px",
-        borderRadius: "50%",
-        background: isGoodLuck
-          ? "radial-gradient(circle, rgba(0,224,150,0.12) 0%, transparent 70%)"
-          : "radial-gradient(circle, rgba(0,229,255,0.1) 0%, transparent 70%)",
-        transition: "background 0.6s ease",
-        pointerEvents: "none",
-      }} />
-
-      {/* Main countdown number or good luck text */}
-      <div style={{
-        fontSize: isGoodLuck ? "4.5rem" : "6rem",
-        fontWeight: 800,
-        fontFamily: "var(--font-mono)",
-        color: isGoodLuck ? "var(--success)" : "var(--accent)",
-        lineHeight: 1,
-        letterSpacing: "-0.04em",
-        textShadow: isGoodLuck
-          ? "0 0 60px rgba(0,224,150,0.5)"
-          : "0 0 60px rgba(0,229,255,0.4)",
-        animation: "countPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
-      }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", background: "rgba(8, 11, 18, 0.75)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.5rem" }}>
+      <div style={{ position: "absolute", width: "400px", height: "400px", borderRadius: "50%", background: isGoodLuck ? "radial-gradient(circle, rgba(0,224,150,0.12) 0%, transparent 70%)" : "radial-gradient(circle, rgba(0,229,255,0.1) 0%, transparent 70%)", transition: "background 0.6s ease", pointerEvents: "none" }} />
+      <div style={{ fontSize: isGoodLuck ? "4.5rem" : "6rem", fontWeight: 800, fontFamily: "var(--font-mono)", color: isGoodLuck ? "var(--success)" : "var(--accent)", lineHeight: 1, letterSpacing: "-0.04em", textShadow: isGoodLuck ? "0 0 60px rgba(0,224,150,0.5)" : "0 0 60px rgba(0,229,255,0.4)", animation: "countPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)" }}>
         {isGoodLuck ? "Good luck!" : countdown}
       </div>
-
-      {/* Subtitle when counting */}
       {!isGoodLuck && (
-        <div style={{
-          textAlign: "center",
-          display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem",
-        }}>
-          <div style={{
-            fontSize: "1.1rem",
-            fontWeight: 700,
-            color: "var(--text)",
-            letterSpacing: "-0.02em",
-          }}>
-            Interview starting in
-          </div>
-          <div style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: "0.78rem",
-            color: "var(--muted)",
-            letterSpacing: "0.08em",
-          }}>
-            Get comfortable and look at the camera
-          </div>
+        <div style={{ textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+          <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>Interview starting in</div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.78rem", color: "var(--muted)", letterSpacing: "0.08em" }}>Get comfortable and look at the camera</div>
         </div>
       )}
-
-      {/* Progress bar */}
       {!isGoodLuck && (
-        <div style={{
-          width: "200px", height: "3px",
-          background: "rgba(0,229,255,0.15)",
-          borderRadius: "99px", overflow: "hidden",
-          marginTop: "0.5rem",
-        }}>
-          <div style={{
-            height: "100%",
-            background: "var(--accent)",
-            borderRadius: "99px",
-            width: `${((10 - countdown) / 10) * 100}%`,
-            transition: "width 0.9s linear",
-            boxShadow: "0 0 8px rgba(0,229,255,0.6)",
-          }} />
+        <div style={{ width: "200px", height: "3px", background: "rgba(0,229,255,0.15)", borderRadius: "99px", overflow: "hidden", marginTop: "0.5rem" }}>
+          <div style={{ height: "100%", background: "var(--accent)", borderRadius: "99px", width: `${((10 - countdown) / 10) * 100}%`, transition: "width 0.9s linear", boxShadow: "0 0 8px rgba(0,229,255,0.6)" }} />
         </div>
       )}
+      <style>{`@keyframes countPop { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
+    </div>
+  );
+}
 
-      <style>{`
-        @keyframes countPop {
-          from { transform: scale(0.7); opacity: 0; }
-          to   { transform: scale(1);   opacity: 1; }
-        }
-      `}</style>
+// ─── CONNECTION STATUS BADGE ──────────────────────────────────────────────────
+function ConnectionBadge({ status }: { status: "connecting" | "connected" | "failed" | "mock" }) {
+  const config = {
+    connecting: { color: "#febc2e", label: "CONNECTING TO BACKEND" },
+    connected:  { color: "var(--success)", label: "BACKEND CONNECTED" },
+    failed:     { color: "var(--danger)", label: "USING MOCK DATA" },
+    mock:       { color: "var(--muted)", label: "MOCK MODE" },
+  }[status];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: config.color }} />
+      <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)", color: config.color, letterSpacing: "0.08em" }}>
+        {config.label}
+      </span>
     </div>
   );
 }
@@ -156,18 +122,138 @@ export default function InterviewPage() {
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [gazeScore, setGazeScore] = useState(88);
-  const [confidence, setConfidence] = useState(82);
-  const [fidget, setFidget] = useState(12);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isReady, setIsReady] = useState(false);
-
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const [gazeScore, setGazeScore]           = useState(88);
+  const [confidence, setConfidence]         = useState(82);
+  const [fidget, setFidget]                 = useState(12);
+  const [isSpeaking, setIsSpeaking]         = useState(false);
+  const [isReady, setIsReady]               = useState(false);
+  const [countdown, setCountdown]           = useState<number | null>(null);
+  const [connStatus, setConnStatus]         = useState<"connecting" | "connected" | "failed" | "mock">("connecting");
 
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const streamRef     = useRef<MediaStream | null>(null);
+  const pcRef         = useRef<RTCPeerConnection | null>(null);
+  const dcRef         = useRef<RTCDataChannel | null>(null);
 
+  // ── Grab webcam on mount ──────────────────────────────────────────────────
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        streamRef.current = stream;
+        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      })
+      .catch(err => {
+        console.error("Camera access denied:", err);
+        setConnStatus("failed");
+      });
+    return () => { streamRef.current?.getTracks().forEach(t => t.stop()); };
+  }, []);
+
+  // ── WebRTC ────────────────────────────────────────────────────────────────
+  const startWebRTC = async () => {
+    if (!streamRef.current) {
+      console.warn("%c[WebRTC] ✗ No media stream — falling back to mock data", "color:#ff4d6d");
+      setConnStatus("failed");
+      startMockStreams();
+      return;
+    }
+
+    console.log("%c[WebRTC] Starting connection to backend...", "color:#febc2e;font-weight:bold");
+
+    try {
+      setConnStatus("connecting");
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
+          {
+            urls: "turn:openrelay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
+        ],
+        iceTransportPolicy: "all",
+      });
+      pcRef.current = pc;
+      (window as any)._pc = pc;
+
+      pc.oniceconnectionstatechange = () => {
+        const s = pc.iceConnectionState;
+        const c: Record<string, string> = { checking: "#febc2e", connected: "#00e096", completed: "#00e096", failed: "#ff4d6d", disconnected: "#ff4d6d", closed: "#5a6a82" };
+        console.log(`%c[WebRTC] ICE → ${s}`, `color:${c[s] ?? "#e8edf5"};font-weight:bold`);
+      };
+      pc.onconnectionstatechange = () => {
+        console.log(`%c[WebRTC] Connection → ${pc.connectionState}`, "color:#00e5ff;font-weight:bold");
+      };
+
+      const dc = pc.createDataChannel("inference");
+      dcRef.current = dc;
+      console.log("%c[DataChannel] Created channel 'inference'", "color:#7b61ff");
+
+      dc.onopen = () => {
+        console.log("%c[DataChannel] ✓ OPEN — backend AI is live", "color:#00e096;font-weight:bold");
+        setConnStatus("connected");
+        dc.send("ping");
+      };
+      dc.onclose = () => console.log("%c[DataChannel] closed", "color:#5a6a82");
+      dc.onerror = (e) => console.error("%c[DataChannel] ✗ error:", "color:#ff4d6d", e);
+
+      dc.onmessage = (event) => {
+        console.log("%c[DataChannel] raw message:", "color: #5a6a82", event.data);
+        try {
+          if (typeof event.data === "string" && event.data.startsWith("pong")) {
+            console.log("%c[DataChannel] ✓ pong received", "color: #00e096");
+            return;
+          }
+          const msg = JSON.parse(event.data);
+          if (msg.type === "video_inference") {
+            const conf = Math.round(msg.confidence * 100);
+            setConfidence(conf);
+            addBiometricPoint({ time: Math.round(msg.timestamp / 1000), gazeScore, confidence: conf, fidgetIndex: fidget, stressSpike: conf < 40 });
+          }
+          if (msg.type === "audio_inference") {
+            const audioConf = Math.round(msg.confidence * 100);
+            setConfidence(prev => Math.round((prev + audioConf) / 2));
+            if (msg.transcript?.trim()) {
+              addTranscriptEntry({ time: elapsedSeconds, speaker: "user", text: msg.transcript.trim() });
+              setIsSpeaking(false);
+            }
+          }
+        } catch { /* non-JSON */ }
+      };
+
+      streamRef.current.getTracks().forEach(track => {
+        pc.addTrack(track, streamRef.current!);
+        console.log(`%c[WebRTC] Added ${track.kind} track`, "color:#7b61ff");
+      });
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const res = await fetch("/api/offer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sdp: offer.sdp, type: offer.type }),
+      });
+
+      if (!res.ok) throw new Error(`Backend returned ${res.status}`);
+      const answer = await res.json();
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log("%c[WebRTC] ✓ Handshake complete — waiting for ICE...", "color:#00e5ff;font-weight:bold");
+
+    } catch (err) {
+      console.error("%c[WebRTC] ✗ Setup failed — falling back to mock:", "color:#ff4d6d;font-weight:bold", err);
+      setConnStatus("failed");
+      startMockStreams();
+    }
+  };
+
+  // ── Countdown ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== "connecting") return;
     setCountdown(10);
@@ -182,121 +268,62 @@ export default function InterviewPage() {
           startInterview();
           setIsReady(true);
           startWebRTC();
-          startMockStreams();
+          startMockTranscript();
         }, 1500);
       }
     }, 1000);
     return () => clearInterval(ticker);
   }, [phase]);
 
-  useEffect(() => {
-    if (phase === "live") setIsReady(true);
-  }, [phase]);
+  useEffect(() => { if (phase === "live") setIsReady(true); }, [phase]);
 
+  // ── Timer ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isReady) return;
-    const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
+    const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
     return () => clearInterval(interval);
   }, [isReady]);
 
+  // ── Auto-scroll transcript ────────────────────────────────────────────────
   useEffect(() => {
-    if (transcriptRef.current) {
+    if (transcriptRef.current)
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-    }
   }, [transcript]);
 
-  const startWebRTC = async () => {
-    try {
-      const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-      });
-      pcRef.current = pc;
-
-      const dc = pc.createDataChannel("chat");
-      dc.onopen = () => console.log("WebRTC DataChannel opened");
-      dc.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          if (data.type === "video_inference" || data.type === "audio_inference") {
-            const conf = data.confidence;
-            console.log(`[WebRTC] Confidence (${data.type}):`, conf);
-            setConfidence(Math.round(conf * 100));
-          }
-        } catch (err) {
-          console.error("Data channel parse error", err);
-        }
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      streamRef.current = stream;
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      const res = await fetch("/api/offer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sdp: pc.localDescription?.sdp,
-          type: pc.localDescription?.type
-        })
-      });
-
-      const answer = await res.json();
-      await pc.setRemoteDescription(answer);
-
-      console.log("WebRTC connected successfully");
-    } catch (err) {
-      console.error("WebRTC Error:", err);
-    }
-  };
-
-  const stopWebRTC = () => {
-    if (pcRef.current) {
-      pcRef.current.close();
-      pcRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-  };
-
+  // ── Mock streams ──────────────────────────────────────────────────────────
   const startMockStreams = () => {
-    MOCK_BIOMETRICS.forEach((point) => {
-      setTimeout(() => {
-        setGazeScore(point.gazeScore);
-        // We use the live WebRTC confidence score now instead of mock
-        // setConfidence(point.confidence);
-        setFidget(point.fidgetIndex);
-        addBiometricPoint(point);
-      }, point.time * 1000);
+    MOCK_BIOMETRICS.forEach(point => {
+      setTimeout(() => { setGazeScore(point.gazeScore); setConfidence(point.confidence); setFidget(point.fidgetIndex); addBiometricPoint(point); }, point.time * 1000);
     });
-    MOCK_TRANSCRIPT.forEach((entry) => {
+    MOCK_TRANSCRIPT.forEach(entry => {
       setTimeout(() => {
         setIsSpeaking(entry.speaker === "interviewer");
         addTranscriptEntry(entry);
-        if (entry.speaker === "interviewer") {
-          setTimeout(() => setIsSpeaking(false), 5000);
-        }
+        if (entry.speaker === "interviewer") setTimeout(() => setIsSpeaking(false), 5000);
       }, entry.time * 1000);
     });
     MOCK_LIVE_ALERTS.forEach(({ delay, message }) => {
-      setTimeout(() => {
-        setLiveAlert(message);
-        setTimeout(() => setLiveAlert(null), 4000);
-      }, delay);
+      setTimeout(() => { setLiveAlert(message); setTimeout(() => setLiveAlert(null), 4000); }, delay);
+    });
+    setConnStatus("mock");
+  };
+
+  const startMockTranscript = () => {
+    MOCK_TRANSCRIPT.filter(e => e.speaker === "interviewer").forEach(entry => {
+      setTimeout(() => { setIsSpeaking(true); addTranscriptEntry(entry); setTimeout(() => setIsSpeaking(false), 5000); }, entry.time * 1000);
+    });
+    MOCK_LIVE_ALERTS.forEach(({ delay, message }) => {
+      setTimeout(() => { setLiveAlert(message); setTimeout(() => setLiveAlert(null), 4000); }, delay);
     });
   };
 
+  // ── Finish ────────────────────────────────────────────────────────────────
   const handleFinish = () => {
-    stopWebRTC();
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    dcRef.current?.close();
+    pcRef.current?.close();
     finishInterview();
-    setTimeout(() => {
-      setPhase("report");
-      router.push("/report");
-    }, 2000);
+    setTimeout(() => { setPhase("report"); router.push("/report"); }, 2000);
   };
 
   const formatTime = (s: number) => {
@@ -320,10 +347,14 @@ export default function InterviewPage() {
 
       {countdown !== null && <CountdownOverlay countdown={countdown} />}
 
+      {/* ── TOP BAR ── */}
       <header style={{ borderBottom: "1px solid var(--border)", padding: "1rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger)", position: "relative" }} className="pulse-ring" />
-          <span className="label" style={{ color: "var(--danger)" }}>LIVE SESSION</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--danger)" }} className="pulse-ring" />
+            <span className="label" style={{ color: "var(--danger)" }}>LIVE SESSION</span>
+          </div>
+          <ConnectionBadge status={connStatus} />
         </div>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 500, letterSpacing: "0.05em" }}>
           {formatTime(elapsedSeconds)}
@@ -333,16 +364,27 @@ export default function InterviewPage() {
         </button>
       </header>
 
+      {/* ── MAIN CONTENT ── */}
       <main style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "1.5rem", padding: "1.5rem 2rem", overflow: "hidden" }}>
+
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          <AvatarPlaceholder isSpeaking={isSpeaking} />
+
+          {/* ── Split panel: AI top / Camera bottom ── */}
+          <div style={{ display: "flex", flexDirection: "column", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "4/3" }}>
+            <AvatarPanel isSpeaking={isSpeaking} />
+            <div style={{ height: "1px", background: "var(--border)", flexShrink: 0 }} />
+            <CameraPanel videoRef={localVideoRef} />
+          </div>
+
+          {/* ── Score rings ── */}
           <div className="card" style={{ display: "flex", justifyContent: "space-around", padding: "1.25rem" }}>
-            <ScoreRing label="GAZE" value={gazeScore} color="var(--accent)" />
-            <ScoreRing label="CONFIDENCE" value={confidence} color="var(--accent2)" />
-            <ScoreRing label="CALM" value={100 - fidget} color="var(--success)" />
+            <ScoreRing label="GAZE"       value={gazeScore}    color="var(--accent)"  />
+            <ScoreRing label="CONFIDENCE" value={confidence}   color="var(--accent2)" />
+            <ScoreRing label="CALM"       value={100 - fidget} color="var(--success)" />
           </div>
         </div>
 
+        {/* ── RIGHT PANEL: alerts + transcript ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", overflow: "hidden" }}>
           <div style={{ minHeight: "52px" }}>
             {liveAlert && (
@@ -360,11 +402,7 @@ export default function InterviewPage() {
               ) : (
                 transcript.map((entry, i) => (
                   <div key={i} className="fade-up" style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                    <div style={{
-                      fontSize: "0.7rem", fontFamily: "var(--font-mono)", fontWeight: 700,
-                      color: entry.speaker === "interviewer" ? "var(--accent)" : "var(--accent2)",
-                      marginTop: "2px", whiteSpace: "nowrap", flexShrink: 0
-                    }}>
+                    <div style={{ fontSize: "0.7rem", fontFamily: "var(--font-mono)", fontWeight: 700, color: entry.speaker === "interviewer" ? "var(--accent)" : "var(--accent2)", marginTop: "2px", whiteSpace: "nowrap", flexShrink: 0 }}>
                       {entry.speaker === "interviewer" ? "AI" : "YOU"}
                     </div>
                     <p style={{ fontSize: "0.85rem", lineHeight: 1.5, color: entry.speaker === "user" ? "var(--text)" : "rgba(232,237,245,0.7)" }}>
@@ -377,16 +415,6 @@ export default function InterviewPage() {
           </div>
         </div>
       </main>
-
-      <footer style={{ borderTop: "1px solid var(--border)", padding: "0.75rem 2rem", display: "flex", alignItems: "center", gap: "1rem" }}>
-        <div style={{ width: "80px", height: "56px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: "1.25rem" }}>📹</span>
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>Your Camera</div>
-          <div className="label" style={{ color: "var(--success)" }}>● MediaPipe Active — 468 landmarks @ 30fps</div>
-        </div>
-      </footer>
     </div>
   );
 }
