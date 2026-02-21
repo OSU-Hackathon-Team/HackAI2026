@@ -348,6 +348,7 @@ export default function InterviewPage() {
             text: streamData.text,
             question_index: questionIndex,
             session_id: sessionId,
+            timestamp_sec: elapsedSeconds,
             resume_text: resumeText,
             job_text: jobText,
             interviewer_persona: interviewerPersona

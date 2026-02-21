@@ -88,11 +88,27 @@ class InterviewAnalyzerEngine:
         with open(self.prompt_path, "r", encoding="utf-8") as file:
             system_instruction = file.read()
             
+        # Merge keyframes by timestamp to consolidate metrics and transcripts
+        merged_keyframes = {}
+        for k in keyframes:
+            # Round to 1 decimal place to handle slight floating point drift
+            ts = round(k.get("timestamp_sec", 0.0), 1)
+            if ts not in merged_keyframes:
+                merged_keyframes[ts] = k
+            else:
+                # Merge fields, preferring non-null values
+                for key, value in k.items():
+                    if value is not None:
+                        merged_keyframes[ts][key] = value
+        
+        # Convert back to sorted list
+        sorted_merged = [merged_keyframes[ts] for ts in sorted(merged_keyframes.keys())]
+
         # Format input cleanly as described in the strict analyzer_prompt.txt
         input_payload = {
             "interviewer_persona": interviewer_persona,
             "session_id": session_id,
-            "keyframes": keyframes
+            "keyframes": sorted_merged
         }
         
         ai_input_message = (

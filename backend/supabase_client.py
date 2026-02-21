@@ -38,9 +38,12 @@ class SupabaseLogger:
             "timestamp_sec": timestamp_sec,
         }
         payload.update(kwargs)
+        print(f"[DEBUG] Supabase Insert Request: {payload}")
 
         try:
             response = self.supabase.table("interview_keyframes").insert(payload).execute()
+            if response.data:
+                print(f"[DEBUG] Supabase Insert Success: ID={response.data[0].get('id')}")
             return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Failed to flush keyframe to Supabase: {e}")
