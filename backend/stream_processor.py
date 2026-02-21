@@ -203,8 +203,6 @@ class AudioStreamProcessor:
         return {
             "type": "audio_inference",
             "transcript": transcript,
-            # embeddings are requested, sending mean-pooled 384 vector to stay within WebRTC DataChannel limits
-            "pooled_embedding": pooled_embedding.tolist()[:10], # Truncated for immediate view, send fully if requested
             "confidence": audio_confidence
         }
 
@@ -236,11 +234,6 @@ class AudioStreamProcessor:
                     # Run model
                     result_event = await asyncio.to_thread(self._process_audio_chunk, audio_float)
                     if result_event:
-                        # Full embedding size 384 is ok to send as list (~4KB payload)
-                        # Re-calculate to safely include all 384 dim if needed
-                        result_event["pooled_embedding"] = await asyncio.to_thread(
-                           self._get_full_embedding_list, audio_float
-                        )
                         self.datachannel_manager.send_json(result_event)
 
             except av.error.EOFError:
@@ -249,13 +242,6 @@ class AudioStreamProcessor:
                 print(f"Audio processing error: {e}")
                 break
 
-    def _get_full_embedding_list(self, audio_data):
-        audio_tensor = whisper.pad_or_trim(audio_data.flatten())
-        mel = whisper.log_mel_spectrogram(audio_tensor, n_mels=whisper_model.dims.n_mels).to(whisper_model.device)
-        with torch.no_grad():
-            audio_features = whisper_model.encoder(mel.unsqueeze(0))
-            pooled_embedding = torch.mean(audio_features, dim=1).cpu().numpy()[0]
-        return pooled_embedding.tolist()
 
 class DataChannelManager:
     def __init__(self, channel=None):
