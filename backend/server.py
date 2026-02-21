@@ -37,10 +37,11 @@ async def offer(request):
     pc_id = "PeerConnection(%s)" % uuid.uuid4()
     pcs.add(pc)
 
-    # We use a MediaBlackhole to consume incoming media streams, meaning
-    # we receive the data but don't do anything with it by default.
-    # You could replace this with processing logic (e.g. saving to file, running ML models)
-    recorder = MediaBlackhole()
+    # We will use our custom processors instead of a simple MediaBlackhole
+    from stream_processor import VideoStreamProcessor, AudioStreamProcessor, DataChannelManager
+    
+    dc_manager = DataChannelManager()
+    processors = []
 
     def log_info(msg, *args):
         logger.info(pc_id + " " + msg, *args)
@@ -49,6 +50,9 @@ async def offer(request):
 
     @pc.on("datachannel")
     def on_datachannel(channel):
+        log_info("Data channel %s created", channel.label)
+        dc_manager.channel = channel
+        
         @channel.on("message")
         def on_message(message):
             if isinstance(message, str) and message.startswith("ping"):
@@ -65,23 +69,20 @@ async def offer(request):
     def on_track(track):
         log_info("Track %s received", track.kind)
 
-        # Here is where the user's webcam video and audio arrive!
-        # `track.kind` will be "audio" or "video".
-        # You can access the frames via async iteration (e.g., `frame = await track.recv()`).
-        # For now, we add the tracks to the blackhole so they are consumed and don't buffer infinitely.
+        # Hook up streams to our backend AI components
         if track.kind == "audio":
-            recorder.addTrack(track)
+            processor = AudioStreamProcessor(track, dc_manager)
+            processors.append(processor)
         elif track.kind == "video":
-            recorder.addTrack(track)
+            processor = VideoStreamProcessor(track, dc_manager)
+            processors.append(processor)
 
         @track.on("ended")
         async def on_ended():
             log_info("Track %s ended", track.kind)
-            await recorder.stop()
 
     # handle offer
     await pc.setRemoteDescription(offer)
-    await recorder.start()
 
     # send answer
     answer = await pc.createAnswer()
