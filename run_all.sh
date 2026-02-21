@@ -10,6 +10,22 @@ cleanup() {
 # Trap SIGINT (Ctrl+C) and call cleanup
 trap cleanup SIGINT
 
+# Setup Python Virtual Environment
+if [ ! -d ".venv" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv .venv
+fi
+
+echo "Activating virtual environment and installing dependencies..."
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Setup Frontend dependencies
+if [ ! -d "node_modules" ]; then
+    echo "Installing frontend dependencies..."
+    npm install
+fi
+
 echo "Starting backend server..."
 python3 backend/server.py &
 BACKEND_PID=$!

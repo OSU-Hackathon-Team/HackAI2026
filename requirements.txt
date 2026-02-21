@@ -1,0 +1,15 @@
+aiohttp
+aiortc
+torch
+mediapipe
+opencv-python
+numpy
+scipy
+Flask
+Flask-Cors
+openai
+httpx
+requests
+librosa
+soundfile
+python-dotenv
