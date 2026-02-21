@@ -46,7 +46,7 @@ class SupabaseLogger:
             logger.error(f"Failed to flush keyframe to Supabase: {e}")
             return None
 
-    def update_keyframe(self, keyframe_id: int, **kwargs):
+    def update_keyframe(self, keyframe_id: str, **kwargs):
         """
         Update an existing keyframe with late-arriving metrics (e.g. from background tasks).
         """
@@ -57,5 +57,53 @@ class SupabaseLogger:
             self.supabase.table("interview_keyframes").update(kwargs).eq("id", keyframe_id).execute()
         except Exception as e:
             logger.error(f"Failed to update keyframe {keyframe_id}: {e}")
+
+    def save_report(self, session_id: str, report_markdown: str):
+        """
+        Save the final coaching report to Supabase.
+        """
+        if not self.supabase:
+            return
+        
+        try:
+            self.supabase.table("interview_reports").upsert({
+                "session_id": session_id,
+                "report_markdown": report_markdown
+            }).execute()
+            logger.info(f"Report saved for session {session_id}")
+        except Exception as e:
+            logger.error(f"Failed to save report: {e}")
+
+    def get_report(self, session_id: str):
+        """
+        Retrieve the coaching report for a session.
+        """
+        if not self.supabase:
+            return None
+        
+        try:
+            response = self.supabase.table("interview_reports").select("*").eq("session_id", session_id).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Failed to fetch report: {e}")
+            return None
+
+    def get_keyframes(self, session_id: str):
+        """
+        Retrieve all keyframes for a session, ordered by timestamp.
+        """
+        if not self.supabase:
+            return []
+        
+        try:
+            response = self.supabase.table("interview_keyframes")\
+                .select("*")\
+                .eq("session_id", session_id)\
+                .order("timestamp_sec", desc=False)\
+                .execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"Failed to fetch keyframes: {e}")
+            return []
 
 supabase_logger = SupabaseLogger()

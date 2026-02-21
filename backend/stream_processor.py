@@ -12,6 +12,40 @@ from scipy.interpolate import interp1d
 import os
 import av
 import whisper
+import re
+
+class SpeechAnalyzer:
+    """
+    Analyzes transcript text for filler words and estimates performance tone.
+    """
+    FILLER_WORDS = [r'\bum+h?\b', r'\buh\b', r'\ber\b', r'\bah\b', r'\blike\b', r'\bu+h+m+\b', r'\byou know\b', r'\bi mean\b']
+    
+    POSITIVE_KEYWORDS = ["definitely", "absolutely", "passionate", "excited", "expertise", "solved", "achieved", "learned"]
+    NEGATIVE_KEYWORDS = ["unsure", "maybe", "i guess", "probably", "not sure", "don't know", "struggled"]
+
+    @classmethod
+    def analyze(cls, text: str):
+        text_lower = text.lower()
+        
+        # Count fillers
+        filler_count = 0
+        for pattern in cls.FILLER_WORDS:
+            filler_count += len(re.findall(pattern, text_lower))
+            
+        # Estimate Tone (0.0 to 1.0, where 0.5 is neutral)
+        sentiment = 0.5
+        pos_matches = sum(1 for word in cls.POSITIVE_KEYWORDS if word in text_lower)
+        neg_matches = sum(1 for word in cls.NEGATIVE_KEYWORDS if word in text_lower)
+        
+        if pos_matches > neg_matches:
+            sentiment = min(1.0, 0.5 + (pos_matches * 0.1))
+        elif neg_matches > pos_matches:
+            sentiment = max(0.0, 0.5 - (neg_matches * 0.1))
+            
+        return {
+            "filler_count": filler_count,
+            "sentiment": sentiment
+        }
 
 from video.models import VisualConfidenceModel, AudioConfidenceModel
 

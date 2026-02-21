@@ -1,0 +1,22 @@
+objc[8249]: Class AVFFrameReceiver is implemented in both /Users/kgozon/aceit/.venv/lib/python3.14/site-packages/av/.dylibs/libavdevice.62.1.100.dylib (0x1099e03a8) and /Users/kgozon/aceit/.venv/lib/python3.14/site-packages/cv2/.dylibs/libavdevice.61.3.100.dylib (0x11b1b43a8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+objc[8249]: Class AVFAudioReceiver is implemented in both /Users/kgozon/aceit/.venv/lib/python3.14/site-packages/av/.dylibs/libavdevice.62.1.100.dylib (0x1099e03f8) and /Users/kgozon/aceit/.venv/lib/python3.14/site-packages/cv2/.dylibs/libavdevice.61.3.100.dylib (0x11b1b43f8). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+WARNING:pypdf._reader:Ignoring wrong pointing object 8 0 (offset 0)
+WARNING:pypdf._reader:Ignoring wrong pointing object 21 0 (offset 0)
+WARNING:pypdf._reader:Ignoring wrong pointing object 42 0 (offset 0)
+WARNING:pypdf._reader:Ignoring wrong pointing object 67 0 (offset 0)
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:httpx:HTTP Request: POST https://api.openai.com/v1/audio/speech "HTTP/1.1 200 OK"
+INFO:__main__:PeerConnection(1fc02e76-b9e2-4979-9aa6-a0eef1188f86) Created for 127.0.0.1
+INFO:__main__:PeerConnection(1fc02e76-b9e2-4979-9aa6-a0eef1188f86) Track video received
+W0000 00:00:1771711882.839106 8642025 face_landmarker_graph.cc:180] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+I0000 00:00:1771711882.940876 8642025 gl_context.cc:407] GL version: 2.1 (2.1 Metal - 90.5), renderer: Apple M4
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+W0000 00:00:1771711882.946404 8642028 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1771711882.955373 8642034 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+I0000 00:00:1771711882.970772 8642049 gl_context.cc:407] GL version: 2.1 (2.1 Metal - 90.5), renderer: Apple M4
+W0000 00:00:1771711882.976177 8642053 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1771711882.987761 8642058 inference_feedback_manager.cc:121] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+INFO:__main__:PeerConnection(1fc02e76-b9e2-4979-9aa6-a0eef1188f86) Track audio received
+INFO:__main__:PeerConnection(1fc02e76-b9e2-4979-9aa6-a0eef1188f86) Connection state is connecting
+INFO:httpx:HTTP Request: POST https://pkbzwdspwkgcikahxfcj.supabase.co/rest/v1/interview_sessions "HTTP/2 404 Not Found"
+ERROR:__main__:Save session error: {'message': "Could not find the table 'public.interview_sessions' in the schema cache", 'code': 'PGRST205', 'hint': "Perhaps you meant the table 'public.interview_reports'", 'details': None}
