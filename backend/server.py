@@ -39,8 +39,11 @@ try:
         process_mediapipe_results, device, SEQUENCE_LENGTH, VisualConfidenceModel,
         VideoStreamProcessor, AudioStreamProcessor, DataChannelManager
     )
+    from anaylisis.engine import InterviewAnalyzerEngine
+    
     client = OpenAI()
-    print("Backend initialization successful (Models & API clients ready)")
+    analyzer_engine = InterviewAnalyzerEngine()
+    print("Backend initialization successful (Models, API clients, & Analyzer ready)")
 except Exception as e:
     print(f"CRITICAL ERROR: Failed to initialize backend components: {e}")
     import traceback
@@ -238,6 +241,16 @@ async def chat(request):
                 overall_confidence_score=metrics.get('confidence_score'),
                 keyframe_reason=f"Unified Turn - Q{question_index + 1}"
             )
+            
+            # Trigger background analysis
+            async def run_analysis():
+                try:
+                    report = await analyzer_engine.generate_report(session_id, "Standard Technical Interviewer")
+                    print(f"\n--- INTERVIEW ANALYSIS REPORT ({session_id}) ---\n{report}\n")
+                except Exception as ex:
+                    print(f"Analysis Error: {ex}")
+            
+            asyncio.create_task(run_analysis())
 
         return web.json_response({"ai_response": ai_response, "next_index": next_index, "is_finished": is_finished})
     except Exception as e:
