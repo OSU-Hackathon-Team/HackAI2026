@@ -6,7 +6,7 @@ import uuid
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
-
+from supabase_client import supabase_logger
 # A Set to keep track of active RTCPeerConnections
 pcs = set()
 
