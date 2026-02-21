@@ -173,7 +173,7 @@ export default function TestAudioPage() {
 
         try {
             // 1. Send to stream-process to get transcript + metrics
-            const streamRes = await fetch('http://127.0.0.1:5000/stream-process', {
+            const streamRes = await fetch('http://127.0.0.1:8080/api/stream-process', {
                 method: 'POST',
                 body: formData,
             });
@@ -193,7 +193,7 @@ export default function TestAudioPage() {
                 setKeyframes(prev => [...prev, newKeyframe]);
 
                 // 3. Send to Chat endpoint
-                const chatRes = await fetch('http://127.0.0.1:5000/chat', {
+                const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -217,19 +217,17 @@ export default function TestAudioPage() {
                 }
 
                 // 4. TTS for AI response
-                if (chatData.ai_response) {
-                    const ttsRes = await fetch('http://127.0.0.1:5000/tts', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: chatData.ai_response }),
-                    });
+                const ttsRes = await fetch('http://127.0.0.1:8080/api/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: chatData.ai_response }),
+                });
 
-                    if (ttsRes.ok) {
-                        const audioBlob = await ttsRes.blob();
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        const audio = new Audio(audioUrl);
-                        audio.play();
-                    }
+                if (ttsRes.ok) {
+                    const audioBlob = await ttsRes.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    audio.play();
                 }
             }
         } catch (error) {
