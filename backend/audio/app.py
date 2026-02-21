@@ -18,7 +18,6 @@ CORS(app)
 
 # Note: Ensure OPENAI_API_KEY and ELEVENLABS_API_KEY are set in environment variables
 client = OpenAI()
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
 
 INTERVIEW_QUESTIONS = [
     "Welcome to Ace It. To start, can you tell me a bit about your experience with AI and machine learning?",
@@ -85,7 +84,7 @@ def chat():
         
     try:
         completion = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
@@ -107,34 +106,17 @@ def tts():
         return jsonify({"error": "No text provided"}), 400
         
     text = data['text']
-    voice_id = "21m00Tcm4TlvDq8ikWAM" # Bella
-    
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
-    headers = {
-        "Accept": "audio/mpeg",
-        "Content-Type": "application/json",
-        "xi-api-key": ELEVENLABS_API_KEY
-    }
-    payload = {
-        "text": text,
-        "model_id": "eleven_turbo_v2_5",
-        "voice_settings": {
-            "stability": 0.5,
-            "similarity_boost": 0.5
-        }
-    }
     
     try:
-        response = requests.post(url, json=payload, headers=headers, stream=True)
-        response.raise_for_status()
-        
         temp_filename = f"{uuid.uuid4().hex}.mp3"
         temp_filepath = os.path.join(tempfile.gettempdir(), temp_filename)
         
-        with open(temp_filepath, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=1024):
-                if chunk:
-                    f.write(chunk)
+        with client.audio.speech.with_streaming_response.create(
+            model="tts-1",
+            voice="nova",
+            input=text
+        ) as response:
+            response.stream_to_file(temp_filepath)
                     
         return send_file(temp_filepath, mimetype="audio/mpeg", as_attachment=False)
         # Note: the temp file isn't deleted here. Real implementation might use an after_request cleanup or in-memory file.
