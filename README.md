@@ -1,7 +1,7 @@
 # 🎯 AceIt: Real-Time Multimodal AI Interview Coach
 
 **Team Name:** Mitchell
-\n
+ 
 **Team Members:**
 1. Jason Seh
 2. Mitchell Eickhoff
