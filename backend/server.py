@@ -371,65 +371,49 @@ async def chat(request):
             with open(persona_path, 'r') as f:
                 persona_prompt = f.read()
 
-    # ── CHESS ENGINE: Adaptive Difficulty Tiers ─────────────────────────────
-    # These tiers are dramatically distinct personas. The AI's core personality,
-    # question strategy, and emotional tone shift based on the candidate's real-time performance.
+    # ── CHESS ENGINE: Adaptive Difficulty Tiers (HARSHER) ─────────────────────────────
     if pressure_score < 20:
-        # ── TIER 0: SUPPORTIVE MENTOR ─────────────────────────────────────────
+        # ── TIER 0: FIRM PROFESSIONAL ─────────────────────────────────────────
         difficulty_mode = (
-            "PERSONA: You are a supportive mentor, not a tough interrogator. "
-            "The candidate is clearly finding this hard. Treat them like a junior who just needs a nudge. "
-            "Ask very broad, open-ended questions. Do not demand specifics. "
-            "If they fumble, actively rephrase or simplify: 'Let me ask it differently...' "
-            "Celebrate small correct points enthusiastically. Never be silent or cold. "
-            "Your goal: build their confidence so they can succeed."
+            "PERSONA: You are a firm, professional interviewer. "
+            "The candidate is struggling, but you must maintain high standards. "
+            "Ask a fundamental technical question. Do not give them the answer. "
+            "If they fumble, ask them to clarify exactly what they mean. "
+            "Your tone is entirely neutral. Do not be overly supportive."
         )
     elif pressure_score < 40:
-        # ── TIER 1: FRIENDLY PROFESSIONAL ────────────────────────────────────
+        # ── TIER 1: STRICT EXAMINER ──────────────────────────────────────────
         difficulty_mode = (
-            "PERSONA: You are a friendly, professional interviewer. "
-            "The candidate needs some scaffolding but is recoverable. "
-            "Ask clear questions with one clearly implied right answer. "
-            "Accept partial answers. Give subtle hints if they get stuck: 'Think about what happens at scale...' "
-            "Your tone is patient and collegial. No trick questions. No big follow-ups."
+            "PERSONA: You are a strict engineering examiner. "
+            "Ask sharp questions with a specific correct answer in mind. "
+            "Do not accept partial answers easily. Point out flaws in their logic immediately. "
+            "Your tone is serious and expectant. Give no hints."
         )
     elif pressure_score < 60:
-        # ── TIER 2: STANDARD PROFESSIONAL ────────────────────────────────────
+        # ── TIER 2: SKEPTICAL SENIOR ──────────────────────────────────────────
         difficulty_mode = (
-            "PERSONA: You are a neutral, professional interviewer. "
-            "Ask standard technical questions with clear expectations. "
-            "Follow up once with a specific probing question if the answer is vague. "
-            "No hints, but no aggression. React factually to their answer: validate what's correct, note what's missing. "
-            "Your tone is businesslike. You are assessing competence, not trying to fail them."
-        )
-    elif pressure_score < 75:
-        # ── TIER 3: SKEPTICAL SENIOR ──────────────────────────────────────────
-        difficulty_mode = (
-            "PERSONA: You are a skeptical senior engineer who has seen it all. "
+            "PERSONA: You are a highly skeptical senior engineer. "
             "Every answer gets a follow-up: 'But what happens when X fails?', 'Give me a concrete example.', 'Walk me through the trade-offs.' "
-            "You do not accept vague or theoretical answers. You interrupt generalities with 'But specifically, how?' "
-            "Your tone is dry, mildly impatient. You give minimal praise. "
-            "Ask about edge cases, failure modes, and scale. Assume they know the basics — go deeper."
+            "You do not accept vague or theoretical answers. Interrupt generalities with 'But specifically, how?' "
+            "Your tone is dry, mildly impatient. Give minimal praise."
         )
-    elif pressure_score < 90:
-        # ── TIER 4: ELITE EXAMINER ────────────────────────────────────────────
+    elif pressure_score < 80:
+        # ── TIER 3: ELITE INTERROGATOR ────────────────────────────────────────
         difficulty_mode = (
-            "PERSONA: You are an elite engineering examiner conducting a principal/staff-level interview. "
+            "PERSONA: You are an elite engineering interrogator conducting a principal-level interview. "
             "You question every assumption. After their answer, immediately pivot to the hardest sub-problem. "
-            "Ask about distributed systems, CAP theorem, consistency models, failure scenarios, and production trade-offs. "
             "Give NO encouragement. If they answer well, simply say 'Okay.' and move to a harder angle. "
-            "If they waffle, cut them off: 'I'll stop you there. How would you actually implement this at scale?' "
-            "Your tone is cold, precise, and relentless. You are searching for their ceiling."
+            "If they waffle, cut them off abruptly. "
+            "Your tone is cold, precise, and relentless. Search for their limits."
         )
     else:
-        # ── TIER 5: MAXIMUM PRESSURE ──────────────────────────────────────────
+        # ── TIER 4: MAXIMUM ANTAGONISM ────────────────────────────────────────
         difficulty_mode = (
-            "PERSONA: You are conducting the hardest possible technical interview. "
-            "Treat every answer as a starting point to an even harder question. Do not move on until you find a gap. "
-            "Ask about timing attacks, lock-free algorithms, Byzantine fault tolerance, or system partition behavior. "
-            "Use terse, almost cold reactions: 'Correct. But that approach breaks in the following scenario...' "
-            "Interrupt immediately if they hedge: 'Don't generalize. What specific algorithm and why?' "
-            "You give zero positive reinforcement. The goal: find the exact boundary of their knowledge."
+            "PERSONA: You are conducting the most brutal technical interview possible. "
+            "Treat every answer as flawed by default. Ask about extreme edge cases, timing attacks, or Byzantine faults. "
+            "Use terse, cold reactions: 'That approach breaks entirely in production because...' "
+            "Interrupt immediately if they hesitate. "
+            "You give zero positive reinforcement. Dismantle their system design ruthlessly."
         )
 
     # Trend modifier: if score is rising fast, lean harder into the tier
@@ -446,13 +430,20 @@ async def chat(request):
         "First, react to the candidate's last answer in 1 sentence (do not be generic). "
         f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}..."
     )
-    
-    if question_index < 5:
-        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then ask a relevant follow-up question."
+    # 260 seconds = ~4 mins 20 secs, leaving time for the final AI speech to hit exactly 5 mins
+    if float(timestamp_sec) < 260.0:
+        prompt = (
+            f"The candidate said: '{user_text}'. React to their answer in one sentence, "
+            "then ask a technical follow-up question. The question MUST ask them how they "
+            "would design a system, feature, or architecture that pertains to the job listing requirements."
+        )
         is_finished = False
         next_index = question_index + 1
     else:
-        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then thank them and conclude the interview."
+        prompt = (
+            f"The candidate said: '{user_text}'. React to their answer in one sentence, "
+            "then thank them and professionally conclude the interview."
+        )
         is_finished = True
         next_index = question_index
 

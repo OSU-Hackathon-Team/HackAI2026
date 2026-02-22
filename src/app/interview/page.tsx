@@ -232,7 +232,10 @@ function CameraPanel({
   onStopRecording,
   onStartInterview,
   isReady,
-  countdown
+  countdown,
+  gazeScore,
+  confidence,
+  fidget
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   cameraOn: boolean;
@@ -247,6 +250,9 @@ function CameraPanel({
   onStartInterview: () => void;
   isReady: boolean;
   countdown: number | null;
+  gazeScore: number;
+  confidence: number;
+  fidget: number;
 }) {
   return (
     <div style={{ position: "relative", width: "100%", flex: 1, background: "#000", overflow: "hidden" }}>
@@ -349,6 +355,35 @@ function CameraPanel({
           <MicIcon off={!micOn} />
         </button>
       </div>
+
+      {/* ── LIVE DATA HUD ── */}
+      {cameraOn && isReady && (
+        <div style={{ position: "absolute", top: "1rem", left: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", pointerEvents: "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", padding: "0.4rem 0.75rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", width: "55px" }}>GAZE</span>
+            <div style={{ width: "60px", height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
+              <div style={{ width: `${gazeScore}%`, height: "100%", background: gazeScore > 70 ? "#00e096" : "#ffcc00", transition: "width 0.3s ease, background 0.3s ease" }} />
+            </div>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "#fff", fontWeight: 700, width: "25px", textAlign: "right" }}>{gazeScore}</span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", padding: "0.4rem 0.75rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", width: "55px" }}>CONF.</span>
+            <div style={{ width: "60px", height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
+              <div style={{ width: `${confidence}%`, height: "100%", background: confidence > 70 ? "#00e5ff" : "#ff8800", transition: "width 0.3s ease, background 0.3s ease" }} />
+            </div>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "#fff", fontWeight: 700, width: "25px", textAlign: "right" }}>{confidence}</span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", padding: "0.4rem 0.75rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", width: "55px" }}>FIDGET</span>
+            <div style={{ width: "60px", height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
+              <div style={{ width: `${fidget}%`, height: "100%", background: fidget < 40 ? "#caff00" : "#ff4d6d", transition: "width 0.3s ease, background 0.3s ease" }} />
+            </div>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "#fff", fontWeight: 700, width: "25px", textAlign: "right" }}>{fidget}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -592,7 +627,7 @@ export default function InterviewPage() {
         if (doneMetadata) {
           setQuestionIndex(doneMetadata.next_index);
           if (doneMetadata.is_finished) {
-            setTimeout(() => finishInterview(), 2000);
+            setTimeout(() => handleFinish(), 2000);
           }
         }
       }
@@ -986,25 +1021,15 @@ export default function InterviewPage() {
               onStartInterview={handleStartInterviewCountdown}
               isReady={isReady}
               countdown={countdown}
+              gazeScore={gazeScore}
+              confidence={confidence}
+              fidget={fidget}
             />
           </div>
 
-          <div className="card" style={{ display: "flex", justifyContent: "space-around", padding: "1.25rem" }}>
-            <ScoreRing label="GAZE" value={gazeScore} color="var(--accent)" />
-            <ScoreRing label="CONFIDENCE" value={confidence} color="var(--accent2)" />
-            <ScoreRing label="CALM" value={100 - fidget} color="var(--success)" />
-          </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", overflow: "hidden" }}>
-          <div style={{ minHeight: "52px" }}>
-            {liveAlert && (
-              <div className="slide-in" style={{ background: "rgba(255,77,109,0.1)", border: "1px solid var(--danger)", borderRadius: "10px", padding: "0.75rem 1rem", fontFamily: "var(--font-mono)", fontSize: "0.85rem", color: "var(--danger)" }}>
-                {liveAlert}
-              </div>
-            )}
-          </div>
-
           <div className="card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "1rem" }}>
             <div className="label" style={{ marginBottom: "0.75rem" }}>LIVE TRANSCRIPT</div>
             <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
