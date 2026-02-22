@@ -132,24 +132,54 @@ class SupabaseLogger:
             logger.error(f"Failed to fetch keyframes: {e}")
             return []
 
-    def save_session_metadata(self, session_id: str, role: str, company: str):
+    def save_session_metadata(self, session_id: str, role: str, company: str, user_id: str = None, **kwargs):
         """
-        Save session-level metadata (role, company).
+        Save or update session-level metadata (role, company, user_id, scores).
         """
         if not self.supabase:
             return
         
         from datetime import datetime
         try:
-            self.supabase.table("interview_sessions").upsert({
+            payload = {
                 "id": session_id,
                 "role": role,
                 "company": company,
-                "date": datetime.now().strftime("%b %d, %Y")
-            }).execute()
+            }
+            if user_id:
+                payload["user_id"] = user_id
+            
+            # Add any extra metrics
+            for k in ["score", "gaze", "confidence", "composure", "spikes", "date"]:
+                if k in kwargs:
+                    payload[k] = kwargs[k]
+            
+            if "date" not in payload:
+                payload["date"] = datetime.now().strftime("%b %d, %Y")
+
+            print(f"[DEBUG] Supabase Session Upsert: {payload}")
+            self.supabase.table("interview_sessions").upsert(payload).execute()
             logger.info(f"Metadata saved for session {session_id}")
         except Exception as e:
             logger.error(f"Failed to save session metadata: {e}")
+
+    def get_user_sessions(self, user_id: str):
+        """
+        Retrieve all sessions for a specific user.
+        """
+        if not self.supabase:
+            return []
+        
+        try:
+            response = self.supabase.table("interview_sessions")\
+                .select("*")\
+                .eq("user_id", user_id)\
+                .order("created_at", desc=True)\
+                .execute()
+            return response.data
+        except Exception as e:
+            logger.error(f"Failed to fetch user sessions: {e}")
+            return []
 
     def get_session_metadata(self, session_id: str):
         """
