@@ -2190,6 +2190,7 @@ function InterviewContent() {
   const audioQueueRef = useRef<AudioQueue | null>(null);
   const isIntroTriggeredRef = useRef(false);
   const currentTurnIdRef = useRef(0);
+  const scriptedQuestionsRef = useRef<any[]>([]);
 
   // Re-attach camera stream when localVideoRef changes or phase changes
   useEffect(() => {
@@ -2202,11 +2203,41 @@ function InterviewContent() {
 
   useEffect(() => { return () => { audioQueueRef.current?.stop(); }; }, []);
 
+  const triggerNextScriptStep = () => {
+    if (scriptedQuestionsRef.current && scriptedQuestionsRef.current.length > 0) {
+      isIntroTriggeredRef.current = true;
+      const nextStep = scriptedQuestionsRef.current.shift();
+      const textToSpeak = typeof nextStep === 'string' ? nextStep : nextStep.text;
+
+      addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text: textToSpeak });
+      if (!audioQueueRef.current) audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+      setIsSpeaking(true);
+      audioQueueRef.current.add(textToSpeak);
+      audioQueueRef.current.signalEndTurn();
+
+      if (typeof nextStep === 'object') {
+        if (nextStep.coding) {
+          setIsCodingPhase(true);
+          setQuestionIndex(3);
+        }
+        if (nextStep.end) {
+          setTimeout(() => handleFinish(), 2000);
+        }
+      }
+      return true;
+    }
+    return false;
+  };
+
   const handleChatStream = async (inputText: string, ignoreScore: boolean = false, forceCoding: boolean = false) => {
     if (!sessionId) return;
     if (audioQueueRef.current) audioQueueRef.current.stop();
     avatarRef.current?.stop();
     const turnId = ++currentTurnIdRef.current;
+
+    // Director Mode Scripted Flow Override
+    if (triggerNextScriptStep()) return;
+
     try {
       if (!audioQueueRef.current) audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
       const chatRes = await fetch('http://127.0.0.1:8080/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: inputText, question_index: questionIndex, session_id: sessionId, timestamp_sec: elapsedSeconds, resume_text: resumeText, job_text: jobText, interviewer_persona: interviewerPersona, pressure_score: pressureScore, pressure_trend: pressureTrend, history: transcript, code: code, force_coding: forceCoding }) });
@@ -2427,6 +2458,10 @@ function InterviewContent() {
   useEffect(() => { if (phase === "live") setIsReady(true); }, [phase]);
   useEffect(() => {
     if (!isReady || isIntroTriggeredRef.current) return;
+
+    // Director Mode Script: Pull the first item from the script if loaded
+    if (triggerNextScriptStep()) return;
+
     if (transcript.length > 0 && transcript[0].speaker === "interviewer") {
       isIntroTriggeredRef.current = true;
       const firstText = transcript[0].text;
@@ -2440,6 +2475,159 @@ function InterviewContent() {
   }, [isReady]);
   useEffect(() => { if (transcriptRef.current) setTimeout(() => { if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight; }, 50); }, [transcript]);
   useEffect(() => { return () => { streamRef.current?.getTracks().forEach(t => t.stop()); }; }, []);
+
+  // ─── DEBUG COMMANDS (Console Control) ─────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const debugObj = {
+        // AI Control
+        speak: (text: string) => {
+          if (!audioQueueRef.current) audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+          addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text });
+          setIsSpeaking(true);
+          audioQueueRef.current.add(text);
+          audioQueueRef.current.signalEndTurn();
+        },
+        injectQuestion: (text: string) => {
+          if (!audioQueueRef.current) audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+          addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text });
+          setIsSpeaking(true);
+          audioQueueRef.current.add(text);
+          audioQueueRef.current.signalEndTurn();
+        },
+        stopSpeech: () => {
+          audioQueueRef.current?.stop();
+          avatarRef.current?.stop();
+          setIsSpeaking(false);
+        },
+
+        // Biometrics Control
+        setGaze: (val: number) => setGazeScore(val),
+        setConfidence: (val: number) => setConfidence(val),
+        setFidget: (val: number) => setFidget(val),
+        setPressure: (val: number) => {
+          useInterviewStore.setState({ pressureScore: val });
+        },
+
+        // Interview Flow
+        start: () => {
+          if (isReady && scriptedQuestionsRef.current && scriptedQuestionsRef.current.length > 0) {
+            triggerNextScriptStep();
+          } else {
+            handleStartInterviewCountdown();
+          }
+        },
+        finish: () => handleFinish(),
+        loadScript: (questions: (string | { text: string, coding?: boolean, end?: boolean })[]) => {
+          scriptedQuestionsRef.current = questions;
+          console.log(`[AceIt] Loaded script with ${questions.length} steps.`);
+        },
+        skipQuestion: (customMsg?: string) => {
+          const prompt = customMsg ? `[SYSTEM: The user has skipped the current question. Please pivot and ask specifically about: ${customMsg}]` : undefined;
+          handleSkipQuestion(prompt);
+        },
+        makeEasier: (customMsg?: string) => {
+          const prompt = customMsg ? `[SYSTEM: The candidate requested to make it easier. Specifically, they want help with: ${customMsg}]` : undefined;
+          handleMakeEasier(prompt);
+        },
+        forceCoding: () => handleSkipToCoding(),
+
+        // Simulation & Direct Control
+        forceAiSpeech: (text: string) => {
+          if (!audioQueueRef.current) audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+          addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text });
+          setIsSpeaking(true);
+          audioQueueRef.current.add(text);
+          audioQueueRef.current.signalEndTurn();
+        },
+        forceUserAnswer: async (text: string) => {
+          addTranscriptEntry({ time: elapsedSeconds, speaker: 'user', text });
+          updatePressureScore((text.length % 100)); // basic fake score
+          await handleChatStream(text);
+        },
+        simulateUserAnswer: async (text: string) => {
+          addTranscriptEntry({ time: elapsedSeconds, speaker: 'user', text });
+          updatePressureScore((text.length % 100));
+          await handleChatStream(text);
+        },
+        simulateAiThinking: (state: boolean) => setIsProcessing(state),
+        setElo: (val: number) => useInterviewStore.setState({ elo: val }),
+        setQuestionIndex: (idx: number) => setQuestionIndex(idx),
+
+        // Settings & Customization
+        toggleCamera: () => handleToggleCamera(),
+        toggleMic: () => handleToggleMic(),
+        setInterviewer: (id: string) => {
+          const interviewer = interviewers.find(i => i.id === id);
+          if (interviewer) {
+            useInterviewStore.getState().setInterviewerPersona(id);
+            useInterviewStore.getState().setInterviewerModel(interviewer.model || "");
+            useInterviewStore.getState().setInterviewerVoice(interviewer.voice || "");
+            return `Switched to ${interviewer.name}`;
+          }
+          return `Interviewer ID "${id}" not found.`;
+        },
+        setInterviewerModel: (url: string) => useInterviewStore.getState().setInterviewerModel(url),
+        clearTranscript: () => useInterviewStore.getState().setTranscript([]),
+
+        // Status & Metadata
+        getStatus: () => ({
+          phase,
+          isReady,
+          isSpeaking,
+          isProcessing,
+          isRecording,
+          elapsedSeconds,
+          pressureScore,
+          gazeScore,
+          confidence,
+          fidget,
+          sessionId,
+          interviewerPersona
+        }),
+
+        help: () => {
+          console.log("%c--- ACE_IT DEBUG CONSOLE ---", "color:#5fc8ff;font-weight:bold;font-size:1.2rem;");
+          console.log("Control the agent and interview flow directly from the console.");
+          console.log("%cAI CONTROL:", "color:#9b6fff;font-weight:bold;");
+          console.log("  debug.speak(text)          - Make the AI speak specific text and add to transcript");
+          console.log("  debug.injectQuestion(text) - Functionally identical to speak()");
+          console.log("  debug.stopSpeech()         - Immediately stop all AI audio");
+          console.log("  debug.simulateAiThinking(b)- Toggle 'Thinking' status UI");
+          console.log("%cBIOMETRICS (0-100):", "color:#2de6a4;font-weight:bold;");
+          console.log("  debug.setGaze(val)         - Set Gaze Stability score");
+          console.log("  debug.setConfidence(val)   - Set Neural Confidence score");
+          console.log("  debug.setFidget(val)       - Set Kinetic Fidget score");
+          console.log("  debug.setPressure(val)     - Force Response Grade (Pressure)");
+          console.log("%cINTERVIEW FLOW:", "color:#ffb340;font-weight:bold;");
+          console.log("  debug.start()              - Trigger 3-sec countdown & start");
+          console.log("  debug.loadScript([...])    - Auto-pilot interview sequence");
+          console.log("  debug.skipQuestion(msg?)   - Skip current question, AI pivots (optional target msg)");
+          console.log("  debug.makeEasier(msg?)     - Reduce difficulty, AI pivots (optional target msg)");
+          console.log("  debug.forceCoding()        - Jump to Python coding phase");
+          console.log("  debug.finish()             - End interview and go to report");
+          console.log("%cDIRECT CONTROL:", "color:#ff4d6d;font-weight:bold;");
+          console.log("  debug.forceAiSpeech(t)     - Force AI to say something and add to transcript");
+          console.log("  debug.forceUserAnswer(t)   - Simulate user message and trigger AI pivot");
+          console.log("  debug.setElo(val)          - Set internal ELO score");
+          console.log("  debug.setQuestionIndex(i)  - Change current question sequence number");
+          console.log("  debug.toggleCamera()       - Toggle local camera track");
+          console.log("  debug.toggleMic()          - Toggle local mic track");
+          console.log("  debug.setInterviewer(id)   - Change interviewer persona");
+          console.log("  debug.clearTranscript()    - Wipe current session transcript");
+          console.log("  debug.getStatus()          - Print current session state");
+          return "Ready for command.";
+        }
+      };
+
+      (window as any).debug = debugObj;
+      (window as any).debugSpeak = debugObj.speak; // Backward compatibility
+      console.log("%c[AceIt] Debug console initialized. Type 'debug.help()' for commands.", "color:#5fc8ff;font-weight:bold;");
+    }
+  }, [
+    phase, isReady, isSpeaking, isProcessing, isRecording, elapsedSeconds,
+    pressureScore, gazeScore, confidence, fidget, transcript, sessionId, interviewerPersona
+  ]);
 
   const handleFinish = async () => {
     streamRef.current?.getTracks().forEach(t => t.stop());
@@ -2456,7 +2644,7 @@ function InterviewContent() {
     setTimeout(() => { setPhase("finished"); router.push(`/report?session_id=${sessionId}`); }, 2000);
   };
 
-  const handleSkipQuestion = async () => {
+  const handleSkipQuestion = async (customPrompt?: string) => {
     const lastQuestion = [...transcript].reverse().find(e => e.speaker === 'interviewer');
     if (lastQuestion && sessionId) {
       addSkippedQuestion(lastQuestion.text);
@@ -2468,12 +2656,15 @@ function InterviewContent() {
     }
     audioQueueRef.current?.stop();
     setIsProcessing(true);
-    try { await handleChatStream("[SYSTEM: The user has skipped this question. Please pivot and ask a different, relevant interview question instead.]", true); }
+    try {
+      const prompt = customPrompt || "[SYSTEM: The user has skipped this question. Please pivot and ask a different, relevant interview question instead.]";
+      await handleChatStream(prompt, true);
+    }
     finally { setIsProcessing(false); }
     setLiveAlert("Question skipped — AI is pivoting..."); setTimeout(() => setLiveAlert(null), 3000);
   };
 
-  const handleMakeEasier = async () => {
+  const handleMakeEasier = async (customPrompt?: string) => {
     if (isRecording) {
       [audioRecorderRef, videoRecorderRef].forEach(ref => { if (ref.current?.state !== 'inactive') { ref.current!.onstop = null; ref.current!.stop(); } ref.current = null; });
       audioChunksRef.current = []; videoChunksRef.current = []; setIsRecording(false);
@@ -2484,7 +2675,10 @@ function InterviewContent() {
     if (pressureScore < 50) degree = "moderate difficulty reduction (break into smaller steps, add hints)";
     if (pressureScore < 10) degree = "significant difficulty reduction (simplest version, beginner-friendly)";
     setIsProcessing(true);
-    try { await handleChatStream(`[SYSTEM: The candidate has requested an easier question. Please regenerate with a ${degree}. Do NOT comment on this adjustment.]`, true); }
+    try {
+      const prompt = customPrompt || `[SYSTEM: The candidate has requested an easier question. Please regenerate with a ${degree}. Do NOT comment on this adjustment.]`;
+      await handleChatStream(prompt, true);
+    }
     finally { setIsProcessing(false); }
     setLiveAlert("Simplifying question..."); setTimeout(() => setLiveAlert(null), 3000);
   };
@@ -2563,8 +2757,8 @@ function InterviewContent() {
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           {isReady && (
             <>
-              <button className="btn-ghost" onClick={handleMakeEasier}>Make Easier</button>
-              <button className="btn-ghost" onClick={handleSkipQuestion}>Skip Question</button>
+              <button className="btn-ghost" onClick={() => handleMakeEasier()}>Make Easier</button>
+              <button className="btn-ghost" onClick={() => handleSkipQuestion()}>Skip Question</button>
             </>
           )}
           {!isCodingPhase && isReady && (
