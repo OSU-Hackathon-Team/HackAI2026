@@ -1,0 +1,35 @@
+Name: Alex Rivera
+Location: Seattle, WA
+Email: a.rivera@email.edu | GitHub: github.com/arivera-dev
+
+OBJECTIVE
+Freshman Computer Science student seeking a Technology Education Internship. 
+Passionate about simplifying complex concepts and fostering digital literacy.
+
+EDUCATION
+University of Washington | Candidate for B.S. in Computer Science
+Expected Graduation: May 2029
+- Relevant Coursework: Intro to Programming, Discrete Math.
+
+TECHNICAL SKILLS
+- Languages: Python, JavaScript, HTML/CSS.
+- Tools: Linux (Arch/i3wm), Git, VS Code.
+- Concepts: Algorithm basics, Debugging, Public Speaking.
+
+PROJECTS
+Personal Technical Documentation
+- Maintained a personal wiki for local development environment setups.
+- Translated CLI-heavy processes into readable guides for peers.
+
+Community Tech Volunteer
+- Assisted local library patrons with basic software troubleshooting.
+- Explained security best practices to non-technical users.
+
+EXPERIENCE
+High School Peer Tutor | Sept 2023 - June 2024
+- Provided one-on-one instruction in Mathematics and Introductory Logic.
+- Adapted teaching styles to accommodate different learning paces.
+
+CAMPUS INVOLVEMENT
+- Member, University Coding Club.
+- Participant, HuskyHacks 2025 (Introductory Track).
