@@ -74,6 +74,7 @@ interface InterviewStore {
   setInterviewers: (interviewers: Interviewer[]) => void;
   clearSessionData: () => void;
 
+  makeEasier: () => void;
   reset: () => void;
 }
 
@@ -199,6 +200,26 @@ export const useInterviewStore = create<InterviewStore>()(
           pressureScore: normalizedScore,
           pressureTrend: trend,
           performanceHistory: [...state.performanceHistory, qualityA].slice(-5)
+        };
+      }),
+      makeEasier: () => set((state) => {
+        const s = state.pressureScore;
+        let eloDrop = 10;
+        if (s < 50) eloDrop = 25;
+        if (s < 10) eloDrop = 50;
+
+        const newElo = Math.max(800, state.elo - eloDrop);
+        const newDifficulty = Math.max(800, state.difficulty - eloDrop);
+
+        // Recalculate pressureScore for immediate feedback
+        const ELO_BASELINE = 1200;
+        const normalizedScore = (1 / (1 + Math.pow(10, (ELO_BASELINE - newElo) / 40))) * 100;
+
+        return {
+          elo: newElo,
+          difficulty: newDifficulty,
+          pressureScore: normalizedScore,
+          pressureTrend: "falling"
         };
       }),
       clearSessionData: () =>
