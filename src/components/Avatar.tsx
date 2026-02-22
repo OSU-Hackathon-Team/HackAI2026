@@ -111,6 +111,7 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
                 if (isMounted) {
                     setIsLoaded(true);
                     console.log("[Avatar] Model loaded successfully:", modelUrl);
+                    head.start(); // Enable initial idling
 
                     // Dynamically center the camera based on the avatar's actual head bone position
                     if (head.objectHead && head.avatarHeight) {
@@ -274,6 +275,8 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
                 if (head.audioCtx && head.audioCtx.state === 'suspended') {
                     await head.audioCtx.resume();
                 }
+                // TalkingHead.start() resumes the animation loop
+                head.start();
                 if (onAudioStart) onAudioStart();
             } catch (err) {
                 console.error("[Avatar] startStream failed:", err);
