@@ -1,9 +1,11 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import dynamic from "next/dynamic";
 import { AvatarHandle } from "@/components/Avatar";
+import { PythonProvider, usePython } from "react-py";
+import { CodeEditor, ConsoleOutput } from "@/components/CodeEditor";
 
 
 const Avatar = dynamic(() => import("@/components/Avatar"), { ssr: false });
@@ -577,7 +579,8 @@ class AudioQueue {
 }
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
-export default function InterviewPage() {
+// ─── INTERVIEW CONTENT ────────────────────────────────────────────────────────
+function InterviewContent() {
   const router = useRouter();
   const {
     phase, setPhase, finishInterview,
@@ -606,6 +609,24 @@ export default function InterviewPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [questionIndex, setQuestionIndex] = useState(0);
+  const [isCodingPhase, setIsCodingPhase] = useState(false);
+  const [code, setCode] = useState("# Live Coding Challenge\n# Write your solution here\n\n");
+
+  const {
+    runPython,
+    stdout,
+    stderr,
+    isLoading,
+    isRunning,
+    isAwaitingInput,
+    prompt: pythonPrompt,
+    sendInput,
+    interruptExecution
+  } = usePython({
+    packages: {
+      official: ["pyodide-http"]
+    }
+  });
 
   const avatarRef = useRef<AvatarHandle | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -623,6 +644,7 @@ export default function InterviewPage() {
   const audioQueueRef = useRef<AudioQueue | null>(null);
   const isIntroTriggeredRef = useRef(false);
   const currentTurnIdRef = useRef(0);
+
 
   // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
   // ─── PIPELINE: Handle Chat Stream ──────────────────────────────────────────
@@ -654,7 +676,8 @@ export default function InterviewPage() {
           interviewer_persona: interviewerPersona,
           pressure_score: pressureScore,
           pressure_trend: pressureTrend,
-          history: transcript // Pass full transcript for context
+          history: transcript, // Pass full transcript for context
+          code: code
         }),
       });
 
@@ -720,6 +743,9 @@ export default function InterviewPage() {
               }
             } else if (data.done) {
               setQuestionIndex(data.next_index);
+              if (data.is_coding_phase !== undefined) {
+                setIsCodingPhase(data.is_coding_phase);
+              }
 
               // Trigger ELO update with the score A returned by the LLM
               if (!data.skip_scoring && data.quality_score !== undefined && !ignoreScore) {
@@ -1280,6 +1306,21 @@ export default function InterviewPage() {
               Skip Question
             </button>
           )}
+          {!isCodingPhase && isReady && (
+            <button
+              onClick={() => { setIsCodingPhase(true); setQuestionIndex(3); }}
+              className="btn-primary"
+              style={{
+                padding: "0.5rem 1.25rem",
+                fontSize: "0.8rem",
+                background: "rgba(202, 255, 0, 0.1)",
+                color: "var(--success)",
+                border: "1px solid rgba(202, 255, 0, 0.2)"
+              }}
+            >
+              DEV: SKIP_TO_CODING
+            </button>
+          )}
           <button className="btn-danger" onClick={handleFinish} style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
             End Interview
           </button>
@@ -1287,47 +1328,170 @@ export default function InterviewPage() {
       </header>
 
       {/* ── MAIN CONTENT ── */}
-      <main style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "1.5rem", padding: "1.5rem 2rem", overflow: "hidden" }}>
+      <main style={{ display: "grid", gridTemplateColumns: isCodingPhase ? "1.5fr 1fr" : "1fr 340px", gap: "1.5rem", padding: "1.5rem 2rem", overflow: "hidden" }}>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-          <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
-            <AvatarPanel
-              isSpeaking={isSpeaking}
-              isProcessing={isProcessing}
-              avatarRef={avatarRef}
-              onAudioStart={() => setIsSpeaking(true)}
-              onAudioEnd={() => {
-                // UI state handled by audioQueue.finishStream() now
-              }}
-              pressureScore={pressureScore}
-              pressureTrend={pressureTrend}
-              interviewerModel={interviewerModel || "/models/business_girl.glb"}
-              interviewerName={interviewers.find((i: any) => i.id === interviewerPersona)?.name || "Technical Interviewer"}
-            />
+        {isCodingPhase ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div className="flex justify-between items-center px-1">
+              <span className="text-zinc-500 text-[10px] font-mono tracking-widest uppercase">Live Coding Challenge</span>
+              <button
+                onClick={() => runPython(code)}
+                disabled={!isReady || isLoading || isRunning}
+                className="btn-primary"
+                style={{ padding: "0.4rem 1rem", fontSize: "0.7rem" }}
+              >
+                RUN_CODE
+              </button>
+            </div>
+            <div style={{ flex: 1, minHeight: "400px" }}>
+              <CodeEditor initialValue={code} onChange={setCode} />
+            </div>
+            <div style={{ height: "200px" }}>
+              <ConsoleOutput
+                stdout={stdout}
+                stderr={stderr}
+                isAwaitingInput={isAwaitingInput}
+                prompt={pythonPrompt}
+                onSendInput={sendInput}
+                isRunning={isRunning}
+                onClear={() => { }}
+              />
+            </div>
           </div>
-          <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
-            <CameraPanel
-              videoRef={localVideoRef}
-              cameraOn={cameraOn}
-              micOn={micOn}
-              onToggleCamera={handleToggleCamera}
-              onToggleMic={handleToggleMic}
-              isRecording={isRecording}
-              isProcessing={isProcessing}
-              isSpeaking={isSpeaking}
-              onStartRecording={startRecording}
-              onStopRecording={stopRecording}
-              onStartInterview={handleStartInterviewCountdown}
-              isReady={isReady}
-              countdown={countdown}
-              gazeScore={gazeScore}
-              confidence={confidence}
-              fidget={fidget}
-            />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+              <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
+                <AvatarPanel
+                  isSpeaking={isSpeaking}
+                  isProcessing={isProcessing}
+                  avatarRef={avatarRef}
+                  onAudioStart={() => setIsSpeaking(true)}
+                  onAudioEnd={() => {
+                    // UI state handled by audioQueue.finishStream() now
+                  }}
+                  pressureScore={pressureScore}
+                  pressureTrend={pressureTrend}
+                  interviewerModel={interviewerModel || "/models/business_girl.glb"}
+                  interviewerName={interviewers.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer"}
+                />
+
+              </div>
+              <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
+                <CameraPanel
+                  videoRef={localVideoRef}
+                  cameraOn={cameraOn}
+                  micOn={micOn}
+                  onToggleCamera={handleToggleCamera}
+                  onToggleMic={handleToggleMic}
+                  isRecording={isRecording}
+                  isProcessing={isProcessing}
+                  isSpeaking={isSpeaking}
+                  onStartRecording={startRecording}
+                  onStopRecording={stopRecording}
+                  onStartInterview={handleStartInterviewCountdown}
+                  isReady={isReady}
+                  countdown={countdown}
+                  gazeScore={gazeScore}
+                  confidence={confidence}
+                  fidget={fidget}
+                />
+              </div>
+            </div>
+
+            {/* ── HUD DASHBOARD ── */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-around",
+              alignItems: "center",
+              background: "rgba(8,11,18,0.4)",
+              backdropFilter: "blur(12px)",
+              borderRadius: "16px",
+              border: "1px solid rgba(255,255,255,0.05)",
+              padding: "1.5rem",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+            }}>
+              <HUDMetric
+                label="GAZE_STABILITY"
+                value={gazeScore}
+                color={gazeScore > 70 ? "#00e096" : "#ffcc00"}
+                glowColor={gazeScore > 70 ? "rgba(0,224,150,0.4)" : "rgba(255,204,0,0.3)"}
+              />
+              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+              <HUDMetric
+                label="NEURAL_CONFIDENCE"
+                value={confidence}
+                color={confidence > 70 ? "#00e5ff" : "#ff8800"}
+                glowColor={confidence > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,136,0,0.3)"}
+              />
+              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+              <HUDMetric
+                label="KINETIC_FIDGET"
+                value={fidget}
+                color={fidget < 40 ? "#caff00" : "#ff4d6d"}
+                glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
+              />
+              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+              <HUDMetric
+                label="PRESSURE_ELO"
+                value={pressureScore}
+                color={getColor(pressureScore)}
+                glowColor={getColor(pressureScore) + "55"} // Dynamic glow matching pressure
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", overflow: "hidden" }}>
+          {isCodingPhase && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", position: "relative" }}>
+                  <AvatarPanel
+                    isSpeaking={isSpeaking}
+                    isProcessing={isProcessing}
+                    avatarRef={avatarRef}
+                    onAudioStart={() => setIsSpeaking(true)}
+                    onAudioEnd={() => {
+                      // UI state handled by audioQueue.finishStream() now
+                    }}
+                    pressureScore={pressureScore}
+                    pressureTrend={pressureTrend}
+                    interviewerModel={interviewerModel || "/models/business_girl.glb"}
+                    interviewerName={interviewers.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer"}
+                  />
+                </div>
+                <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", position: "relative" }}>
+                  <CameraPanel
+                    videoRef={localVideoRef}
+                    cameraOn={cameraOn}
+                    micOn={micOn}
+                    onToggleCamera={handleToggleCamera}
+                    onToggleMic={handleToggleMic}
+                    isRecording={isRecording}
+                    isProcessing={isProcessing}
+                    isSpeaking={isSpeaking}
+                    onStartRecording={startRecording}
+                    onStopRecording={stopRecording}
+                    onStartInterview={handleStartInterviewCountdown}
+                    isReady={isReady}
+                    countdown={countdown}
+                    gazeScore={gazeScore}
+                    confidence={confidence}
+                    fidget={fidget}
+                  />
+                </div>
+              </div>
+              {/* Compact HUD in Coding Phase */}
+              <div style={{ display: "flex", gap: "0.5rem", background: "rgba(0,0,0,0.2)", padding: "0.5rem", borderRadius: "8px" }}>
+                <HUDMetric label="GAZE" value={gazeScore} color="#00e096" glowColor="rgba(0,224,150,0.2)" />
+                <HUDMetric label="CONF" value={confidence} color="#00e5ff" glowColor="rgba(0,229,255,0.2)" />
+                <HUDMetric label="FIDG" value={fidget} color="#caff00" glowColor="rgba(202,255,0,0.2)" />
+                <HUDMetric label="ELO" value={pressureScore} color={getColor(pressureScore)} glowColor={getColor(pressureScore) + "22"} />
+              </div>
+            </>
+          )}
+
           <div className="card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "1rem" }}>
             <div className="label" style={{ marginBottom: "0.75rem" }}>LIVE TRANSCRIPT</div>
             <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -1352,5 +1516,15 @@ export default function InterviewPage() {
         </div>
       </main >
     </div >
+  );
+}
+
+export default function InterviewPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center text-[#caff00] font-mono">LOADING INTERVIEW ENVIRONMENT...</div>}>
+      <PythonProvider>
+        <InterviewContent />
+      </PythonProvider>
+    </Suspense>
   );
 }
