@@ -201,6 +201,7 @@ function AvatarPanel({
           ref={avatarRef}
           onAudioStart={onAudioStart}
           onAudioEnd={onAudioEnd}
+          cameraZoom={1.25} // Developer: Adjust this value to zoom in/out (positive values zoom in)
         />
       </div>
 
@@ -1065,8 +1066,8 @@ export default function InterviewPage() {
       {/* ── MAIN CONTENT ── */}
       <main style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "1.5rem", padding: "1.5rem 2rem", overflow: "hidden" }}>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          <div style={{ display: "flex", flexDirection: "column", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "4/3" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+          <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
             <AvatarPanel
               isSpeaking={isSpeaking}
               avatarRef={avatarRef}
@@ -1075,7 +1076,8 @@ export default function InterviewPage() {
               pressureScore={pressureScore}
               pressureTrend={pressureTrend}
             />
-            <div style={{ height: "1px", background: "var(--border)", flexShrink: 0 }} />
+          </div>
+          <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
             <CameraPanel
               videoRef={localVideoRef}
               cameraOn={cameraOn}
@@ -1094,9 +1096,8 @@ export default function InterviewPage() {
               confidence={confidence}
               fidget={fidget}
             />
-          </div >
-
-        </div >
+          </div>
+        </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", overflow: "hidden" }}>
           <div className="card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "1rem" }}>

@@ -10,6 +10,7 @@ interface AvatarProps {
     modelUrl?: string;
     onAudioEnd?: () => void;
     onAudioStart?: () => void;
+    cameraZoom?: number;
 }
 
 export interface AvatarHandle {
@@ -19,7 +20,8 @@ export interface AvatarHandle {
 const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
     modelUrl = "/models/beard_man.glb",
     onAudioEnd,
-    onAudioStart
+    onAudioStart,
+    cameraZoom = 0
 }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const headRef = useRef<any>(null);
@@ -33,7 +35,12 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
         // TalkingHead expects the element to be available
         const head = new TalkingHead(containerRef.current, {
             lipsyncModules: [], // We'll register manually to bypass dynamic import issues
-            pcmSampleRate: 44100
+            pcmSampleRate: 44100,
+            cameraView: 'head',
+            cameraDistance: -Math.abs(cameraZoom), // negative distance zooms in
+            cameraRotateEnable: false,
+            cameraPanEnable: false,
+            cameraZoomEnable: false
         }) as any;
 
         // Manually register English lipsync module
