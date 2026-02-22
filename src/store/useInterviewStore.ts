@@ -1,137 +1,219 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+export type InterviewPhase = 'upload' | 'initial' | 'connecting' | 'live' | 'processing' | 'finished';
 
 export interface TranscriptEntry {
-    time: number;
-    speaker: 'user' | 'interviewer';
-    text: string;
+  time: number;
+  speaker: 'user' | 'interviewer';
+  text: string;
 }
 
 export interface BiometricPoint {
-    time: number;
-    gazeScore: number;
-    confidence: number;
-    fidgetIndex: number;
-    fillerCount?: number;
-    tone?: number;
-    stressSpike: boolean;
+  time: number;
+  gazeScore: number;
+  confidence: number;
+  fidgetIndex: number;
+  fillerCount?: number;
+  tone?: number;
+  stressSpike: boolean;
 }
 
-interface InterviewState {
-    phase: string;
-    transcript: TranscriptEntry[];
-    biometrics: BiometricPoint[];
-    sessionId: string | null;
-    resumeText: string;
-    jobText: string;
-    interviewerPersona: string;
-    role: string;
-    company: string;
-    pressureScore: number;
-    pressureTrend: 'stable' | 'rising' | 'falling';
-    aiCoachingReport: string | null;
-    liveAlert: string | null;
+interface InterviewStore {
+  phase: InterviewPhase;
+  sessionId: string | null;
+  resumeText: string | null;
+  jobText: string | null;
+  biometrics: BiometricPoint[];
+  transcript: TranscriptEntry[];
+  interviewerPersona: string | null;
+  interviewerModel: string | null;
+  liveAlert: string | null;
+  interviewStartTime: number | null;
+  aiCoachingReport: string | null;
+  role: string;
+  company: string;
+  // ── Adaptive ELO System ──────────────────────────────────────────────────
+  pressureScore: number;           // 0-100, the normalized display score (baseline 50)
+  elo: number;                     // Internal ELO (starts at 1200)
+  difficulty: number;              // Internal Difficulty (starts at 1200)
+  questionCount: number;           // Number of questions answered
+  eloDeltas: number[];             // History of last 3 ELO changes for ΔS
+  performanceHistory: number[];    // rolling window of last 5 raw scores (A values 0..1)
+  pressureTrend: "rising" | "falling" | "stable"; // direction for backend context
 
-    setPhase: (phase: string) => void;
-    setSessionId: (id: string | null) => void;
-    setResumeText: (text: string) => void;
-    setJobText: (text: string) => void;
-    setInterviewerPersona: (id: string) => void;
-    setRole: (role: string) => void;
-    setCompany: (company: string) => void;
-    setAiCoachingReport: (report: string | null) => void;
-    setBiometrics: (data: BiometricPoint[]) => void;
-    setTranscript: (data: TranscriptEntry[]) => void;
-    addTranscriptEntry: (entry: TranscriptEntry) => void;
-    updateLastTranscriptText: (text: string) => void;
-    addBiometricPoint: (point: BiometricPoint) => void;
-    updatePressureScore: (delta: number) => void;
-    updateEloScore: (score: number) => void;
-    setLiveAlert: (alert: string | null) => void;
-    startInterview: () => void;
-    finishInterview: () => void;
-    reset: () => void;
-    clearSessionData: () => void;
+  setPhase: (phase: InterviewPhase) => void;
+  setSessionId: (id: string | null) => void;
+  setResumeText: (text: string) => void;
+  setJobText: (text: string) => void;
+  setInterviewerPersona: (persona: string) => void;
+  setInterviewerModel: (model: string) => void;
+  addBiometricPoint: (point: BiometricPoint) => void;
+  addTranscriptEntry: (entry: TranscriptEntry) => void;
+  updateLastTranscriptText: (text: string) => void;
+  setLiveAlert: (alert: string | null) => void;
+  startInterview: () => void;
+  finishInterview: () => void;
+  setAiCoachingReport: (report: string | null) => void;
+  setBiometrics: (biometrics: BiometricPoint[]) => void;
+  setTranscript: (transcript: TranscriptEntry[]) => void;
+  setRole: (role: string) => void;
+  setCompany: (company: string) => void;
+  updateEloScore: (qualityA: number) => void;
+  updatePressureScore: (rawScore: number) => void;
+  clearSessionData: () => void;
+  reset: () => void;
 }
 
-export const useInterviewStore = create<InterviewState>((set) => ({
-    phase: 'initial',
-    transcript: [],
-    biometrics: [],
-    sessionId: null,
-    resumeText: '',
-    jobText: '',
-    interviewerPersona: '',
-    role: 'Software Engineer',
-    company: 'AceIt',
-    pressureScore: 50,
-    pressureTrend: 'stable',
-    aiCoachingReport: null,
-    liveAlert: null,
+export const useInterviewStore = create<InterviewStore>()(
+  persist(
+    (set) => ({
+      phase: "upload",
+      sessionId: null,
+      resumeText: null,
+      jobText: null,
+      interviewerPersona: "10_data_scientist", // Default
+      interviewerModel: "/models/business_girl.glb", // Default
+      biometrics: [],
+      transcript: [],
+      liveAlert: null,
+      interviewStartTime: null,
+      aiCoachingReport: null,
+      role: "Software Engineer",
+      company: "AceIt",
+      pressureScore: 50,
+      elo: 1200,
+      difficulty: 1200,
+      questionCount: 0,
+      eloDeltas: [],
+      performanceHistory: [],
+      pressureTrend: "stable",
 
-    setPhase: (phase) => set({ phase }),
-    setSessionId: (sessionId) => set({ sessionId }),
-    setResumeText: (resumeText) => set({ resumeText }),
-    setJobText: (jobText) => set({ jobText }),
-    setInterviewerPersona: (interviewerPersona) => set({ interviewerPersona }),
-    setRole: (role) => set({ role }),
-    setCompany: (company) => set({ company }),
-    setAiCoachingReport: (aiCoachingReport) => set({ aiCoachingReport }),
-    setBiometrics: (biometrics) => set({ biometrics }),
-    setTranscript: (transcript) => set({ transcript }),
+      setPhase: (phase) => set({ phase }),
+      setSessionId: (id) => set({ sessionId: id }),
+      setResumeText: (text) => set({ resumeText: text }),
+      setJobText: (text) => set({ jobText: text }),
+      setInterviewerPersona: (persona) => set({ interviewerPersona: persona }),
+      setInterviewerModel: (model) => set({ interviewerModel: model }),
+      addBiometricPoint: (point) =>
+        set((state) => ({ biometrics: [...state.biometrics, point] })),
+      addTranscriptEntry: (entry) =>
+        set((state) => ({ transcript: [...state.transcript, entry] })),
+      updateLastTranscriptText: (text) =>
+        set((state) => {
+          if (state.transcript.length === 0) return state;
+          const last = state.transcript[state.transcript.length - 1];
+          const updated = { ...last, text: last.text + text };
+          const newList = [...state.transcript];
+          newList[newList.length - 1] = updated;
+          return { transcript: newList };
+        }),
+      setLiveAlert: (alert) => set({ liveAlert: alert }),
+      startInterview: () => {
+        console.log("[DEBUG] Starting new interview session, resetting ELO tracking.");
+        set({
+          phase: "live",
+          interviewStartTime: Date.now(),
+          pressureScore: 50,
+          elo: 1200,
+          difficulty: 1200,
+          questionCount: 0,
+          eloDeltas: [],
+          performanceHistory: [],
+          pressureTrend: "stable",
+        });
+      },
+      finishInterview: () => set({ phase: "processing" }),
+      setAiCoachingReport: (report) => set({ aiCoachingReport: report }),
+      setBiometrics: (biometrics) => set({ biometrics }),
+      setTranscript: (transcript) => set({ transcript }),
+      setRole: (role) => set({ role }),
+      setCompany: (company) => set({ company }),
+      updateEloScore: (qualityA) => set((state) => {
+        const n = state.questionCount;
+        const ELO_BASELINE = 1200;
 
-    addTranscriptEntry: (entry) => set((state) => ({
-        transcript: [...state.transcript, entry]
-    })),
+        // 1. K(n) = 100 / (1 + 0.02 * n) -- Extreme volatility
+        const K = 100 / (1 + 0.02 * n);
 
-    updateLastTranscriptText: (text) => set((state) => {
-        const newTranscript = [...state.transcript];
-        if (newTranscript.length > 0) {
-            newTranscript[newTranscript.length - 1].text = text;
-        }
-        return { transcript: newTranscript };
+        // 2. E = 1 / (1 + 10^((D - ELO(n)) / 400))
+        const E = 1 / (1 + Math.pow(10, (state.difficulty - state.elo) / 400));
+
+        // 3. ELO(n+1) = ELO(n) + K * (qualityA - E)
+        const deltaElo = K * (qualityA - E);
+        const newElo = state.elo + deltaElo;
+
+        // 4. Update rolling deltas and ΔS (last 3)
+        const newEloDeltas = [...state.eloDeltas, deltaElo].slice(-3);
+        const deltaS = newEloDeltas.reduce((a, b) => a + b, 0);
+
+        // 5. D(next) = ELO(n) + 0.4 * ΔS
+        const nextDifficulty = newElo + 0.4 * deltaS;
+
+        // 6. Normalized Score (0-100)
+        // Sharper divisor (80 instead of 100) makes it extremely jumpy
+        const normalizedScore = (1 / (1 + Math.pow(10, (ELO_BASELINE - newElo) / 80))) * 100;
+
+        const trend: "rising" | "falling" | "stable" =
+          deltaElo > 5 ? "rising" :
+            deltaElo < -5 ? "falling" : "stable";
+
+        console.log(`[ELO_DEBUG] n=${n}, K=${K.toFixed(2)}, E=${E.toFixed(3)}, A=${qualityA.toFixed(2)}`);
+        console.log(`[ELO_DEBUG] deltaElo=${deltaElo.toFixed(2)}, newElo=${newElo.toFixed(2)}`);
+        console.log(`[ELO_DEBUG] normalizedScore=${normalizedScore.toFixed(2)} (${Math.round(normalizedScore)})`);
+
+        return {
+          elo: newElo,
+          difficulty: nextDifficulty,
+          questionCount: n + 1,
+          eloDeltas: newEloDeltas,
+          pressureScore: normalizedScore,
+          pressureTrend: trend,
+          performanceHistory: [...state.performanceHistory, qualityA].slice(-5)
+        };
+      }),
+      updatePressureScore: (rawScore) => set((state) => {
+        // Legacy fallback or combined logic if needed
+        return { pressureScore: state.pressureScore }; // No-op for now as we use ELO
+      }),
+      clearSessionData: () =>
+        set({
+          sessionId: null,
+          biometrics: [],
+          transcript: [],
+          liveAlert: null,
+          interviewStartTime: null,
+          aiCoachingReport: null,
+          pressureScore: 50,
+          performanceHistory: [],
+          pressureTrend: "stable",
+        }),
+      reset: () =>
+        set({
+          phase: "upload",
+          sessionId: null,
+          resumeText: null,
+          jobText: null,
+          interviewerPersona: "10_data_scientist",
+          interviewerModel: "/models/business_girl.glb",
+          biometrics: [],
+          transcript: [],
+          liveAlert: null,
+          interviewStartTime: Date.now(),
+          aiCoachingReport: null,
+          role: "Software Engineer",
+          company: "AceIt",
+          pressureScore: 50,
+          elo: 1200,
+          difficulty: 1200,
+          questionCount: 0,
+          eloDeltas: [],
+          performanceHistory: [],
+          pressureTrend: "stable",
+        }),
     }),
-
-    addBiometricPoint: (point) => set((state) => ({
-        biometrics: [...state.biometrics, point]
-    })),
-
-    updatePressureScore: (delta) => set((state) => {
-        const newScore = Math.max(0, Math.min(100, state.pressureScore + delta * 20));
-        const trend = delta > 0 ? 'rising' : delta < 0 ? 'falling' : 'stable';
-        return { pressureScore: newScore, pressureTrend: trend };
-    }),
-
-    updateEloScore: (score) => set((state) => {
-        // Expected score is 0.0 to 1.0 from Gemini
-        const target = score * 100;
-        const newScore = state.pressureScore * 0.7 + target * 0.3;
-        const trend = target > state.pressureScore ? 'rising' : 'falling';
-        return { pressureScore: newScore, pressureTrend: trend };
-    }),
-
-    setLiveAlert: (liveAlert) => set({ liveAlert }),
-
-    startInterview: () => set({ phase: 'live' }),
-
-    finishInterview: () => set({ phase: 'finished' }),
-
-    reset: () => set({
-        phase: 'initial',
-        transcript: [],
-        biometrics: [],
-        sessionId: null,
-        pressureScore: 50,
-        pressureTrend: 'stable',
-        aiCoachingReport: null,
-        liveAlert: null,
-    }),
-
-    clearSessionData: () => set({
-        transcript: [],
-        biometrics: [],
-        sessionId: null,
-        pressureScore: 50,
-        pressureTrend: 'stable',
-        aiCoachingReport: null,
-    }),
-}));
+    {
+      name: 'interview-storage', // name of the item in the storage (must be unique)
+    }
+  )
+);

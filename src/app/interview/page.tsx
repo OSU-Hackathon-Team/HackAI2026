@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import dynamic from "next/dynamic";
 import { AvatarHandle } from "@/components/Avatar";
+import { INTERVIEWERS } from "@/types/interviewer";
 
 const Avatar = dynamic(() => import("@/components/Avatar"), { ssr: false });
 
@@ -230,7 +231,9 @@ function AvatarPanel({
   onAudioStart,
   onAudioEnd,
   pressureScore,
-  pressureTrend
+  pressureTrend,
+  interviewerModel,
+  interviewerName
 }: {
   isSpeaking: boolean;
   isProcessing: boolean;
@@ -239,6 +242,8 @@ function AvatarPanel({
   onAudioEnd: () => void;
   pressureScore: number;
   pressureTrend: "rising" | "falling" | "stable";
+  interviewerModel: string;
+  interviewerName: string;
 }) {
   return (
     <div style={{ position: "relative", width: "100%", flex: 1, background: "linear-gradient(135deg, #050508 0%, #0a0a0f 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
@@ -249,12 +254,15 @@ function AvatarPanel({
           ref={avatarRef}
           onAudioStart={onAudioStart}
           onAudioEnd={onAudioEnd}
+          modelUrl={interviewerModel}
           cameraZoom={1} // Developer: Adjust this value to zoom in/out (positive values zoom in)
         />
       </div>
 
       <div style={{ position: "absolute", top: "1rem", right: "1rem", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-        <div style={{ fontWeight: 800, letterSpacing: "0.2em", position: "relative", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "#fff", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>NEURAL_INTERVIEWER_V2</div>
+        <div style={{ fontWeight: 800, letterSpacing: "0.2em", position: "relative", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "#fff", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>
+          {interviewerName.toUpperCase().replace(/\s+/g, "_")}
+        </div>
         <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--success)" : isProcessing ? "var(--accent)" : "rgba(255,255,255,0.3)", fontSize: "0.6rem", letterSpacing: "0.1em" }}>
           {isSpeaking ? "STATUS // TRANSMITTING" : isProcessing ? "STATUS // THINKING" : "STATUS // CAPTURING"}
         </div>
@@ -512,7 +520,7 @@ export default function InterviewPage() {
     updateLastTranscriptText,
     liveAlert, setLiveAlert,
     startInterview,
-    sessionId, resumeText, jobText, interviewerPersona,
+    sessionId, resumeText, jobText, interviewerPersona, interviewerModel,
     pressureScore, updatePressureScore, pressureTrend, updateEloScore
   } = useInterviewStore();
 
@@ -1100,7 +1108,7 @@ export default function InterviewPage() {
     pcRef.current?.close();
     finishInterview();
     setTimeout(() => {
-      setPhase("report");
+      setPhase("finished");
       router.push(`/report?session_id=${sessionId}`);
     }, 2000);
   };
@@ -1161,6 +1169,8 @@ export default function InterviewPage() {
                 }}
                 pressureScore={pressureScore}
                 pressureTrend={pressureTrend}
+                interviewerModel={interviewerModel || "/models/business_girl.glb"}
+                interviewerName={INTERVIEWERS.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer"}
               />
             </div>
             <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
