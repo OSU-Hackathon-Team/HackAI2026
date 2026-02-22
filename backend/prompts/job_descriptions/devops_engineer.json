@@ -1,0 +1,4 @@
+{
+    "title": "DevOps & Cloud Engineer",
+    "description": "We search for a DevOps & Cloud Engineer to automate our infrastructure and streamline our deployment processes. You will be responsible for managing CI/CD pipelines, monitoring system health, and ensuring the security and scalability of our cloud environment. Key tasks include implementing Infrastructure as Code (Terraform/CloudFormation), managing containerized applications with Docker and Kubernetes, and optimizing cloud costs. You should have extensive experience with AWS or Azure, strong scripting skills (Bash/Python), and a deep understanding of network security and configuration management. A 'security-first' mindset and experience with site reliability engineering (SRE) principles are highly valued."
+}

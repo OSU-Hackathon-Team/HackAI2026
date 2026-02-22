@@ -1,0 +1,4 @@
+{
+    "title": "Data Infrastructure Engineer",
+    "description": "We are seeking a Data Infrastructure Engineer to build and maintain our large-scale data processing systems. You will design and implement robust ETL/ELT pipelines, manage data lakes and warehouses, and ensure data availability for our analytics teams. Your role involves working with technologies like Apache Spark, Kafka, Snowflake, or Airflow. You should have strong SQL skills, proficiency in Python or Java, and experience with data modeling best practices. The ideal candidate understands the complexities of handling petabyte-scale data and is focused on building automated, self-healing data platforms that provide high-quality, low-latency data access."
+}

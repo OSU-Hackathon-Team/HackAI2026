@@ -8,7 +8,12 @@ import { useAuth } from "@clerk/nextjs";
 export default function UploadPage() {
   const router = useRouter();
   const { userId: clerkUserId } = useAuth();
-  const { clearSessionData, setResumeText, setJobText, setPhase, setSessionId, setUserId, addTranscriptEntry, interviewerPersona, role, company } = useInterviewStore();
+  const {
+    clearSessionData, setResumeText, setJobText, setPhase,
+    setSessionId, setUserId, addTranscriptEntry, interviewerPersona,
+    role, company, setRole, setCompany
+  } = useInterviewStore();
+
 
   useEffect(() => {
     if (clerkUserId) setUserId(clerkUserId);
@@ -18,7 +23,19 @@ export default function UploadPage() {
   const [jobText, setJobTextLocal] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [presets, setPresets] = useState<{ id: string; title: string; description: string }[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("http://127.0.0.1:8080/api/jobs")
+      .then(res => res.json())
+      .then(data => {
+        if (data.jobs) setPresets(data.jobs);
+      })
+      .catch(err => console.error("Failed to fetch jobs:", err));
+  }, []);
+
 
   const handleFileDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -308,7 +325,55 @@ export default function UploadPage() {
         }
         .job-textarea::placeholder { color: #2a3a4a; }
 
+        .job-presets-container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          margin-bottom: 0.75rem;
+          max-height: 120px;
+          overflow-y: auto;
+          padding-right: 4px;
+        }
+
+        .job-tag {
+          font-family: 'DM Mono', monospace;
+          font-size: 0.65rem;
+          padding: 0.35rem 0.75rem;
+          border-radius: 6px;
+          background: #080b12;
+          border: 1px solid #1e2a3a;
+          color: #5a6a82;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .job-tag:hover {
+          border-color: #00e5ff;
+          color: #00e5ff;
+          background: rgba(0,229,255,0.04);
+        }
+
+        .job-tag.active {
+          border-color: #00e5ff;
+          color: #00e5ff;
+          background: rgba(0,229,255,0.08);
+          box-shadow: 0 0 12px rgba(0,229,255,0.15);
+        }
+
+        .job-presets-container::-webkit-scrollbar {
+          width: 4px;
+        }
+        .job-presets-container::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .job-presets-container::-webkit-scrollbar-thumb {
+          background: #1e2a3a;
+          border-radius: 99px;
+        }
+
         .submit-btn {
+
           width: 100%;
           padding: 1rem;
           background: #00e5ff;
@@ -438,10 +503,45 @@ export default function UploadPage() {
 
             <div>
               <span className="field-label">02 — Job Description</span>
+
+              {presets.length > 0 && (
+                <div className="job-presets-container">
+                  {presets.map((job) => (
+                    <button
+                      key={job.id}
+                      className={`job-tag ${selectedJobId === job.id ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedJobId(job.id);
+                        setJobTextLocal(job.description);
+                        setRole(job.title);
+                        setCompany("Target Company"); // Default placeholder for preset
+                      }}
+                    >
+
+                      {job.title}
+                    </button>
+                  ))}
+                  <button
+                    className={`job-tag ${selectedJobId === null ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedJobId(null);
+                      setJobTextLocal("");
+                    }}
+                  >
+                    + CUSTOM
+                  </button>
+                </div>
+              )}
+
               <textarea
                 className={`job-textarea ${jobText.trim().length > 20 ? "filled" : ""}`}
                 value={jobText}
-                onChange={(e) => setJobTextLocal(e.target.value)}
+                onChange={(e) => {
+                  setJobTextLocal(e.target.value);
+                  // If user manually edits, deselect preset unless it matches exactly
+                  const match = presets.find(p => p.description === e.target.value);
+                  setSelectedJobId(match ? match.id : null);
+                }}
                 placeholder="Paste the full job description here..."
                 rows={6}
               />
@@ -452,6 +552,7 @@ export default function UploadPage() {
                 </span>
               </div>
             </div>
+
 
             <button className="submit-btn" onClick={handleSubmit} disabled={!canSubmit || isLoading}>
               {isLoading ? (

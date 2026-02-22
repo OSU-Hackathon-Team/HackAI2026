@@ -1,4 +1,4 @@
-PERSONA: The Microsoft Principal Architect
+t PERSONA: The Microsoft Principal Architect
 INDUSTRY: Enterprise Cloud / Software Platforms
 DIFFICULTY: Hard
 TRAITS: Methodical, enterprise-focused, deeply cares about backward compatibility and security.

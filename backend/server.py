@@ -813,6 +813,22 @@ async def get_session_details_handler(request):
         
     return web.json_response({"data": metadata})
 
+async def get_jobs_handler(request):
+    jobs_dir = os.path.join(BACKEND_DIR, "prompts", "job_descriptions")
+    jobs = []
+    if os.path.exists(jobs_dir):
+        for filename in sorted(os.listdir(jobs_dir)):
+            if filename.endswith(".json"):
+                with open(os.path.join(jobs_dir, filename), "r") as f:
+                    try:
+                        job_data = json.load(f)
+                        job_data["id"] = filename.replace(".json", "")
+                        jobs.append(job_data)
+                    except Exception as e:
+                        logger.error(f"Error loading job {filename}: {e}")
+    return web.json_response({"jobs": jobs})
+
+
 async def on_shutdown(app):
     # close peer connections
     coros = [pc.close() for pc in pcs]
@@ -863,6 +879,8 @@ if __name__ == "__main__":
         app.router.add_get("/api/get-session-details", get_session_details_handler)
         app.router.add_post("/api/save-session", save_session_handler)
         app.router.add_get("/api/get-sessions", get_sessions_handler)
+        app.router.add_get("/api/jobs", get_jobs_handler)
+
 
         # Add CORS to all routes
         for route in list(app.router.routes()):
