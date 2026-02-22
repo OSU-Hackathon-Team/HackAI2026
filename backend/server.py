@@ -526,15 +526,15 @@ async def chat(request):
             "You give zero positive reinforcement. Dismantle their system design ruthlessly."
         )
 
-    # Conversational Mode for Coding Challenge
     if is_coding_phase:
         difficulty_mode = (
             "CONVERSATIONAL MODE: You are guiding the candidate through a live coding challenge in Python. "
+            "TAILOR THE TASK: The question MUST be directly relevant to the specific Job Description and the Candidate's Resume provided. "
+            "IMPORTANT: If the user just skipped to this phase, start immediately with 'Let's move on to the coding question.' followed by a full, detailed task. "
             "You must NOT divulge the solution or write code for them. "
-            "Instead, talk with them to understand their thought process. "
-            "Ask clarifying questions about their approach, edge cases, or complexity. "
-            "Your goal is to evaluate BOTH the end result (code) and their reasoning. "
-            "Be inquisitive but firm. If they struggle, give subtle hints but never the answer."
+            "Instead, talk with them to understand their technical approach. "
+            "Ask sharp, clarifying questions. Avoid empathy puffery. "
+            "Keep it technical, cold, and direct. "
         )
 
     # Trend modifier: if score is rising fast, lean harder into the tier
@@ -552,8 +552,8 @@ async def chat(request):
         f"--- ADAPTIVE DIFFICULTY INSTRUCTION ---\n"
         f"{difficulty_mode}{trend_modifier}\n\n"
         "Keep your response under 3 sentences. "
-        "First, react to the candidate's last answer in 1 sentence (do not be generic). "
-        f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}...\n\n"
+        + ("" if is_coding_phase else "First, react to the candidate's last answer in 1 sentence (do not be generic). ") +
+        f"\nContext - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}...\n\n"
         "CRITICAL GRADING INSTRUCTION: You MUST evaluate the candidate's last answer and assign a quality score A (0.0 to 1.0).\n"
         "IMPORTANT: Decouple your persona's tone from this grade. Even if your persona is skeptical, aggressive, or cold, you MUST give a high score (0.8-1.0) if the candidate provides specific, deep technical details (e.g., race conditions, idempotency, architectural trade-offs).\n"
         "Scoring Rubric (BE OBJECTIVE AND REWARD TECHNICAL DEPTH):\n"
@@ -592,11 +592,21 @@ async def chat(request):
         next_index = 0
     elif is_coding_phase:
         # Coding Challenge Prompt
-        prompt = (
-            f"The candidate is in a coding challenge. Their current code is: {current_code}. "
-            f"They said: '{user_text}'. React to their thought process and ask a guiding question "
-            "to help them move forward or justify a decision."
-        )
+        is_starting_coding = "[SYSTEM: The user has requested to skip" in user_text or (not current_code.strip() or current_code.startswith("# Live Coding"))
+        if is_starting_coding:
+            prompt = (
+                "The user is ready for the live coding challenge. "
+                "BASED ON THE JOB DESCRIPTION AND RESUME provided in the system context, "
+                "PRESENT A SPECIFIC, RELEVANT Python coding challenge now. "
+                "Describe the problem clearly, including requirements and any constraints. "
+                "Start exactly with 'Let's move on to the coding question.' then the full task description. No fluff."
+            )
+        else:
+            prompt = (
+                f"The candidate is in the middle of a coding challenge. Current code: {current_code}. "
+                f"They said: '{user_text}'. Ask a direct technical or guiding question "
+                "to help them move forward or justify a decision. No fluff."
+            )
         is_finished = False
         next_index = question_index + 1
     elif float(timestamp_sec) < 260.0:

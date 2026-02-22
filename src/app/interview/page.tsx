@@ -1803,6 +1803,32 @@ function MicIcon({ off }: { off: boolean }) {
   );
 }
 
+// ─── CODING TASK PANEL ───────────────────────────────────────────────────────
+function CodingTask({ transcript }: { transcript: { speaker: string; text: string }[] }) {
+  const lastInterviewerMessage = [...transcript].reverse().find(m => m.speaker === 'interviewer');
+
+  return (
+    <div className="card fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", padding: "1.5rem", gap: "1rem", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#5fc8ff", animation: "blink 2s ease-in-out infinite" }} />
+          <span className="label" style={{ color: "var(--cyan)" }}>ACTIVE_CHALLENGE</span>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", paddingRight: "0.5rem", marginTop: "0.25rem" }}>
+        <p style={{ fontSize: "1.05rem", lineHeight: 1.6, color: "#fff", fontFamily: "var(--display)", fontWeight: 500, whiteSpace: "pre-wrap", letterSpacing: "-0.01em" }}>
+          {lastInterviewerMessage?.text?.replace(/\[SCORE:\s*\d+\.?\d*\]/gi, "").trim() || "SYSTEM: INITIALIZING CODING ENVIRONMENT..."}
+        </p>
+      </div>
+      <div style={{ borderTop: "1px solid var(--border)", paddingTop: "0.75rem", marginTop: "auto" }}>
+        <div style={{ fontFamily: "var(--mono)", fontSize: "0.5rem", color: "var(--muted)", letterSpacing: "0.1em" }}>
+          SYSTEM // CHALLENGE_VERSION_1.0 // RE-EVALUATING_PERFORMANCE
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── HUD METRIC RING ──────────────────────────────────────────────────────────
 function HUDMetric({ label, value, color, glowColor }: { label: string; value: number; color: string; glowColor: string }) {
   const r = 26;
@@ -2165,6 +2191,15 @@ function InterviewContent() {
   const isIntroTriggeredRef = useRef(false);
   const currentTurnIdRef = useRef(0);
 
+  // Re-attach camera stream when localVideoRef changes or phase changes
+  useEffect(() => {
+    if (localVideoRef.current && streamRef.current && cameraOn) {
+      if (localVideoRef.current.srcObject !== streamRef.current) {
+        localVideoRef.current.srcObject = streamRef.current;
+      }
+    }
+  }, [isCodingPhase, cameraOn, localVideoRef.current]);
+
   useEffect(() => { return () => { audioQueueRef.current?.stop(); }; }, []);
 
   const handleChatStream = async (inputText: string, ignoreScore: boolean = false, forceCoding: boolean = false) => {
@@ -2195,14 +2230,19 @@ function InterviewContent() {
             if (data.error) { updateLastTranscriptText(`[ERROR: ${data.error}]`); break; }
             if (data.token) {
               fullSentence += data.token; sentenceBuffer += data.token;
-              updateLastTranscriptText(fullSentence);
+              // Strip debug score tag from display
+              const displaySentence = fullSentence.replace(/\[SCORE:\s*\d+\.?\d*\]/gi, "").trim();
+              updateLastTranscriptText(displaySentence);
               if (/[,.!?;\n:]$/.test(sentenceBuffer.trim()) && sentenceBuffer.trim().length > 15) {
-                const fragmentForTTS = sentenceBuffer.trim(); sentenceBuffer = "";
+                const fragmentForTTS = sentenceBuffer.replace(/\[SCORE:\s*\d+\.?\d*\]/gi, "").trim();
+                sentenceBuffer = "";
                 setIsSpeaking(true);
                 if (turnId === currentTurnIdRef.current && audioQueueRef.current) audioQueueRef.current.add(fragmentForTTS);
               }
             } else if (data.done) {
               setQuestionIndex(data.next_index);
+              const finalDisplay = data.full_text?.replace(/\[SCORE:\s*\d+\.?\d*\]/gi, "").trim() || fullSentence.replace(/\[SCORE:\s*\d+\.?\d*\]/gi, "").trim();
+              updateLastTranscriptText(finalDisplay);
               if (data.is_coding_phase !== undefined) setIsCodingPhase(data.is_coding_phase);
               if (!data.skip_scoring && data.quality_score !== undefined && !ignoreScore) updateEloScore(data.quality_score);
               if (audioQueueRef.current && turnId === currentTurnIdRef.current) audioQueueRef.current.signalEndTurn();
@@ -2462,12 +2502,12 @@ function InterviewContent() {
     audioQueueRef.current?.stop();
     setIsCodingPhase(true); setQuestionIndex(3);
     setIsProcessing(true);
-    try { await handleChatStream("[SYSTEM: The user has requested to skip directly to the live coding challenge. Present a relevant Python programming task.]", true, true); }
+    try { await handleChatStream("[SYSTEM: The user has requested to skip directly to the live coding challenge. Start your response exactly with the phrase 'Let's move on to the coding question.' followed by the python programming task description. Do not include any other conversational filler, pleasantries, or empathy tokens. NO FLUFF. Just and only: 'Let's move on to the coding question.' + the task details.]", true, true); }
     finally { setIsProcessing(false); }
     setLiveAlert("Initiating coding challenge..."); setTimeout(() => setLiveAlert(null), 3000);
   };
 
-  const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+  const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 
   if (phase === "processing") {
     return (
@@ -2537,7 +2577,7 @@ function InterviewContent() {
       </header>
 
       {/* ── MAIN ── */}
-      <main style={{ display: "grid", gridTemplateColumns: isCodingPhase ? "1.5fr 1fr" : "1fr 360px", gap: "1.25rem", padding: "1.25rem 1.75rem", overflow: "hidden", position: "relative", zIndex: 1 }}>
+      <main style={{ display: "grid", gridTemplateColumns: isCodingPhase ? "1.5fr minmax(320px, 1fr)" : "1fr minmax(320px, 22.5rem)", gap: "1.25rem", padding: "1.25rem 1.75rem", overflow: "hidden", position: "relative", zIndex: 1 }}>
 
         {/* ── LEFT COLUMN ── */}
         {isCodingPhase ? (
@@ -2551,12 +2591,14 @@ function InterviewContent() {
                 ▶ RUN CODE
               </button>
             </div>
-            <div style={{ flex: 1, minHeight: "400px", borderRadius: "14px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
-              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "1px", background: "linear-gradient(90deg,transparent,rgba(45,230,164,0.4),transparent)", zIndex: 1 }} />
-              <CodeEditor initialValue={code} onChange={setCode} />
-            </div>
-            <div style={{ height: "180px", borderRadius: "14px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)" }}>
-              <ConsoleOutput stdout={stdout} stderr={stderr} isAwaitingInput={isAwaitingInput} prompt={pythonPrompt} onSendInput={sendInput} isRunning={isRunning} onClear={() => { }} />
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+              <div style={{ flex: "1 1 60%", minHeight: "200px", borderRadius: "14px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "1px", background: "linear-gradient(90deg,transparent,rgba(45,230,164,0.4),transparent)", zIndex: 1 }} />
+                <CodeEditor initialValue={code} onChange={setCode} />
+              </div>
+              <div style={{ flex: "0 0 160px", minHeight: "100px", borderRadius: "14px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)" }}>
+                <ConsoleOutput stdout={stdout} stderr={stderr} isAwaitingInput={isAwaitingInput} prompt={pythonPrompt} onSendInput={sendInput} isRunning={isRunning} onClear={() => { }} />
+              </div>
             </div>
           </div>
         ) : (
@@ -2602,75 +2644,67 @@ function InterviewContent() {
         {/* ── RIGHT COLUMN ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", overflow: "hidden" }}>
 
-          {/* Coding phase: compact video panels on right */}
-          {isCodingPhase && (
-            <>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.875rem" }}>
+          {isCodingPhase ? (
+            /* Coding phase: Avatar + Camera + Coding Task */
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem", flex: 1, minHeight: 0 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.875rem", flexShrink: 0 }}>
+                {/* Avatar card */}
                 <div className="card" style={{ aspectRatio: "1/1" }}>
                   <AvatarPanel isSpeaking={isSpeaking} isProcessing={isProcessing} avatarRef={avatarRef} onAudioStart={() => setIsSpeaking(true)} onAudioEnd={() => { }} pressureScore={pressureScore} pressureTrend={pressureTrend} interviewerModel={interviewerModel || "/models/business_girl.glb"} interviewerName={interviewerName} />
                 </div>
+                {/* Camera card */}
                 <div className="card" style={{ aspectRatio: "1/1" }}>
                   <CameraPanel videoRef={localVideoRef} cameraOn={cameraOn} micOn={micOn} onToggleCamera={handleToggleCamera} onToggleMic={handleToggleMic} isRecording={isRecording} isProcessing={isProcessing} isSpeaking={isSpeaking} onStartRecording={startRecording} onStopRecording={stopRecording} onStartInterview={handleStartInterviewCountdown} isReady={isReady} countdown={countdown} gazeScore={gazeScore} confidence={confidence} fidget={fidget} />
                 </div>
               </div>
-              {/* Compact HUD strip */}
-              <div style={{ background: "rgba(255,255,255,0.018)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.07)", padding: "0.875rem 1rem", display: "flex", flexDirection: "column", gap: "0.75rem", position: "relative", overflow: "hidden" }}>
-                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "1px", background: "linear-gradient(90deg,transparent,rgba(45,230,164,0.3),transparent)" }} />
-                <div style={{ display: "flex", justifyContent: "space-around" }}>
-                  <HUDMetric label="GAZE" value={gazeScore} color="#2de6a4" glowColor="rgba(45,230,164,0.4)" />
-                  <HUDMetric label="CONF" value={confidence} color="#5fc8ff" glowColor="rgba(95,200,255,0.4)" />
-                  <HUDMetric label="FIDG" value={fidget} color="#9b6fff" glowColor="rgba(155,111,255,0.4)" />
+
+              {/* Dedicated Task Display */}
+              <CodingTask transcript={transcript} />
+            </div>
+          ) : (
+            /* Regular interview phase: Panels + Transcript */
+            <>
+              {/* Transcript panel */}
+              <div className="card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "1.125rem" }}>
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span style={{ fontFamily: "var(--mono)", fontSize: "0.52rem", color: "rgba(255,255,255,0.18)", letterSpacing: "0.18em" }}>LIVE_TRANSCRIPT</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#5fc8ff", animation: isReady ? "blink 2s ease-in-out infinite" : "none" }} />
+                    <span style={{ fontFamily: "var(--mono)", fontSize: "0.48rem", color: isReady ? "rgba(95,200,255,0.4)" : "rgba(255,255,255,0.12)", letterSpacing: "0.12em" }}>{isReady ? "ACTIVE" : "WAITING"}</span>
+                  </div>
                 </div>
-                <div style={{ height: "2px", background: "rgba(255,255,255,0.05)", borderRadius: "1px", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${pressureScore}%`, background: getColor(pressureScore), transition: "width 0.6s ease, background 0.6s ease", boxShadow: `0 0 8px ${getColor(pressureScore)}` }} />
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontFamily: "var(--mono)", fontSize: "0.48rem", color: "rgba(255,255,255,0.18)", letterSpacing: "0.14em" }}>RESPONSE_GRADE</span>
-                  <span style={{ fontFamily: "var(--mono)", fontSize: "0.6rem", color: getColor(pressureScore), fontWeight: 700 }}>{Math.round(pressureScore)}%</span>
+
+                {/* Messages */}
+                <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.875rem", paddingRight: "0.25rem" }}>
+                  {transcript.length === 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: "0.75rem", opacity: 0.3 }}>
+                      <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.3)" }} />
+                      </div>
+                      <span style={{ fontFamily: "var(--mono)", fontSize: "0.6rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textAlign: "center" }}>{isReady ? "Listening..." : "Enable camera & mic to begin"}</span>
+                    </div>
+                  ) : (
+                    transcript.map((entry, i) => (
+                      <div key={i} className="fade-up" style={{ display: "flex", gap: "0.65rem", alignItems: "flex-start" }}>
+                        {/* Speaker badge */}
+                        <div style={{ flexShrink: 0, marginTop: "1px", padding: "0.15rem 0.45rem", borderRadius: "4px", background: entry.speaker === "interviewer" ? "rgba(95,200,255,0.1)" : "rgba(155,111,255,0.1)", border: `1px solid ${entry.speaker === "interviewer" ? "rgba(95,200,255,0.2)" : "rgba(155,111,255,0.2)"}` }}>
+                          <span style={{ fontFamily: "var(--mono)", fontSize: "0.5rem", fontWeight: 600, color: entry.speaker === "interviewer" ? "#5fc8ff" : "#9b6fff", letterSpacing: "0.1em" }}>
+                            {entry.speaker === "interviewer" ? "AI" : "YOU"}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: "0.82rem", lineHeight: 1.6, color: entry.speaker === "user" ? "rgba(232,237,245,0.9)" : "rgba(232,237,245,0.6)", fontFamily: "var(--display)", fontWeight: entry.speaker === "user" ? 500 : 400 }}>
+                          {entry.text}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </>
           )}
-
-          {/* Transcript panel */}
-          <div className="card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "1.125rem" }}>
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ fontFamily: "var(--mono)", fontSize: "0.52rem", color: "rgba(255,255,255,0.18)", letterSpacing: "0.18em" }}>LIVE_TRANSCRIPT</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#5fc8ff", animation: isReady ? "blink 2s ease-in-out infinite" : "none" }} />
-                <span style={{ fontFamily: "var(--mono)", fontSize: "0.48rem", color: isReady ? "rgba(95,200,255,0.4)" : "rgba(255,255,255,0.12)", letterSpacing: "0.12em" }}>{isReady ? "ACTIVE" : "WAITING"}</span>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.875rem", paddingRight: "0.25rem" }}>
-              {transcript.length === 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: "0.75rem", opacity: 0.3 }}>
-                  <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "rgba(255,255,255,0.3)" }} />
-                  </div>
-                  <span style={{ fontFamily: "var(--mono)", fontSize: "0.6rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.1em", textAlign: "center" }}>{isReady ? "Listening..." : "Enable camera & mic to begin"}</span>
-                </div>
-              ) : (
-                transcript.map((entry, i) => (
-                  <div key={i} className="fade-up" style={{ display: "flex", gap: "0.65rem", alignItems: "flex-start" }}>
-                    {/* Speaker badge */}
-                    <div style={{ flexShrink: 0, marginTop: "1px", padding: "0.15rem 0.45rem", borderRadius: "4px", background: entry.speaker === "interviewer" ? "rgba(95,200,255,0.1)" : "rgba(155,111,255,0.1)", border: `1px solid ${entry.speaker === "interviewer" ? "rgba(95,200,255,0.2)" : "rgba(155,111,255,0.2)"}` }}>
-                      <span style={{ fontFamily: "var(--mono)", fontSize: "0.5rem", fontWeight: 600, color: entry.speaker === "interviewer" ? "#5fc8ff" : "#9b6fff", letterSpacing: "0.1em" }}>
-                        {entry.speaker === "interviewer" ? "AI" : "YOU"}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: "0.82rem", lineHeight: 1.6, color: entry.speaker === "user" ? "rgba(232,237,245,0.9)" : "rgba(232,237,245,0.6)", fontFamily: "var(--display)", fontWeight: entry.speaker === "user" ? 500 : 400 }}>
-                      {entry.text}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
         </div>
       </main>
     </div>

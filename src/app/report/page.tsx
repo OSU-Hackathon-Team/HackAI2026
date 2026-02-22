@@ -254,7 +254,7 @@ function HudTooltip({ active, payload, label }: any) {
 function PerformanceTrendChart({ data }: { data: any[] }) {
   const chartData = data.length > 0
     ? data.map((d) => ({
-      t: `${Math.floor(d.time / 60)}:${String(d.time % 60).padStart(2, "0")}`,
+      t: `${Math.floor(d.time / 60)}:${String(Math.floor(d.time % 60)).padStart(2, "0")}`,
       score: Math.round((d.gazeScore + d.confidence + Math.max(0, 100 - d.fidgetIndex)) / 3),
       gaze: d.gazeScore, confidence: d.confidence,
       composure: Math.max(0, 100 - d.fidgetIndex),
@@ -448,7 +448,7 @@ function TranscriptRow({ entry, isStress, onJump }: { entry: any; isStress: bool
         fontFamily: "'DM Mono', monospace", fontSize: "0.62rem", color: C.cyan,
         whiteSpace: "nowrap", paddingTop: 3, width: 38, flexShrink: 0,
       }}>
-        {String(Math.floor(entry.time / 60)).padStart(2, "0")}:{String(entry.time % 60).padStart(2, "0")}
+        {String(Math.floor(entry.time / 60)).padStart(2, "0")}:{String(Math.floor(entry.time % 60)).padStart(2, "0")}
       </div>
       <div style={{ flex: 1 }}>
         <div style={{
@@ -522,9 +522,10 @@ export default function ReportPage() {
                   stressSpike: kf.severity === "critical",
                 });
               }
-              if (kf.interviewer_question) mappedTx.push({ time: kf.timestamp_sec, speaker: "interviewer", text: kf.interviewer_question });
+              const cleanText = (txt: string) => txt.replace(/\[SCORE:\s*\d+\.?\d*\]/gi, "").trim();
+              if (kf.interviewer_question) mappedTx.push({ time: kf.timestamp_sec, speaker: "interviewer", text: cleanText(kf.interviewer_question) });
               if (kf.associated_transcript) mappedTx.push({ time: kf.timestamp_sec, speaker: "user", text: kf.associated_transcript });
-              if (kf.ai_response) mappedTx.push({ time: kf.timestamp_sec + 0.5, speaker: "interviewer", text: kf.ai_response });
+              if (kf.ai_response) mappedTx.push({ time: kf.timestamp_sec + 0.5, speaker: "interviewer", text: cleanText(kf.ai_response) });
             });
             mappedBio.sort((a, b) => a.time - b.time);
             mappedTx.sort((a, b) => a.time - b.time);
@@ -650,7 +651,7 @@ export default function ReportPage() {
           </h1>
 
           <div style={{ display: "flex", gap: "2rem", marginTop: "1.75rem", flexWrap: "wrap", alignItems: "center" }}>
-            {[["Candidate ID", sessionId || urlSessionId || "DEMO-SYS"], ["Role", displayRole], ["Date", displayDate]].map(([k, v]) => (
+            {[["Report Version", "v2.0"], ["Role", displayRole], ["Date", displayDate]].map(([k, v]) => (
               <div key={k} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.57rem", color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>{k}</span>
                 <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.84rem", color: C.offwhite, fontWeight: 500 }}>{v}</span>
@@ -689,7 +690,7 @@ export default function ReportPage() {
             </span>
           </div>
           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.6rem", color: C.dim }}>
-            Session · {sessionId || urlSessionId || "DEMO"}
+            Analysis Status · COMPLETED
           </span>
         </div>
 
@@ -777,7 +778,7 @@ export default function ReportPage() {
           animation: "fadeUp 0.6s 480ms ease both",
         }}>
           <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
-            {[["Candidate", sessionId || urlSessionId || "DEMO-SYS"], ["Date", displayDate]].map(([k, v]) => (
+            {[["Analysis Type", "Technical Evaluation"], ["Date", displayDate]].map(([k, v]) => (
               <div key={k}>
                 <div style={{ fontFamily: "'DM Mono', monospace", fontSize: "0.55rem", color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>{k}</div>
                 <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "0.84rem", color: C.offwhite, fontWeight: 500 }}>{v}</div>
