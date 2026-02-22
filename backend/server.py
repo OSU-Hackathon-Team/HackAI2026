@@ -512,7 +512,6 @@ async def chat(request):
             else:
                 print(f"[DEBUG] Received empty or non-text chunk from Gemini")
 
-<<<<<<< HEAD
         # Extract the score from the full response
         quality_score = 0.5 # Default
         import re
@@ -522,53 +521,35 @@ async def chat(request):
             try:
                 quality_score = float(match.group(1))
                 print(f"[DEBUG] Extracted quality_score: {quality_score}")
-                # Clean up the display text by removing the score tag (case insensitive)
+                # Clean up the display text by removing the score tag
                 full_ai_response = re.sub(r"\[SCORE:\s*\d+\.?\d*\]", "", full_ai_response, flags=re.IGNORECASE).strip()
             except Exception as e:
                 print(f"[DEBUG] Failed to parse quality_score from match: {match.group(1)} - {e}")
                 pass
         else:
-            # Try a looser match if the bracket format fails
-            alt_match = re.search(r"SCORE:\s*(\d+\.?\d*)", full_ai_response, re.IGNORECASE)
-            if alt_match:
+            # Progressive fallbacks:
+            # 1. Any bracketed number anywhere: [0.2]
+            res = re.search(r"\[(\d+\.?\d*)]", full_ai_response)
+            if not res:
+                # 2. "Score: X" anywhere
+                res = re.search(r"score:\s*(\d+\.?\d*)", full_ai_response, re.IGNORECASE)
+            if not res:
+                # 3. Any decimal number at the very end
+                res = re.search(r"(\d\.\d+)\s*$", full_ai_response)
+            
+            if res:
                 try:
-                    quality_score = float(alt_match.group(1))
-                    print(f"[DEBUG] Extracted fallback quality_score: {quality_score}")
-                    full_ai_response = re.sub(r"SCORE:\s*\d+\.?\d*", "", full_ai_response, flags=re.IGNORECASE).strip()
-                except:
-                    pass
-            else:
-                # Check if it outputted the literal placeholder from my mistake
-                if "SCORE: X.X" in full_ai_response:
-                    print(f"[ERROR] LLM outputted terminal 'X.X' literally. Check prompt instructions.")
-                
-                # Progressive fallbacks:
-                # 1. Any bracketed number anywhere: [0.2]
-                res = re.search(r"\[(\d+\.?\d*)]", full_ai_response)
-                if not res:
-                    # 2. "Score: X" anywhere
-                    res = re.search(r"score:\s*(\d+\.?\d*)", full_ai_response, re.IGNORECASE)
-                if not res:
-                    # 3. Any decimal number at the very end
-                    res = re.search(r"(\d\.\d+)\s*$", full_ai_response)
-                
-                if res:
-                    try:
-                        quality_score = float(res.group(1))
-                        print(f"[DEBUG] Robust extraction recovered: {quality_score}")
-                    except: pass
+                    quality_score = float(res.group(1))
+                    print(f"[DEBUG] Robust extraction recovered: {quality_score}")
+                except: pass
 
-                if quality_score == 0.5:
-                    tail = full_ai_response[-100:].replace('\n', ' ')
-                    print(f"[DEBUG] Extraction failed. Raw tail: ...{tail}")
+            if quality_score == 0.5:
+                tail = full_ai_response[-100:].replace('\n', ' ')
+                print(f"[DEBUG] Extraction failed. Raw tail: ...{tail}")
 
         # Send metadata at the end including the quality score A
+        print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}, score: {quality_score}")
         await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
-=======
-        # Send metadata at the end
-        print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}")
-        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
->>>>>>> a7b5851b5b3ca49f1912684fa65b29a785da755a
 
         # ── BACKGROUND: Supabase Logging & Analysis ──
         # We wrap this in a top-level task so the SSE stream can end independently
@@ -656,17 +637,8 @@ async def tts(request):
         print(f"[DEBUG] TTS complete. Serving file: {temp_audio}")
         return web.FileResponse(temp_audio)
     except Exception as e:
-<<<<<<< HEAD
-        err_str = str(e)
-        if "quota_exceeded" in err_str:
-            print(f"[WARNING] ElevenLabs Quota Exceeded. Continuing without TTS.")
-        else:
-            logger.error(f"ElevenLabs TTS Error: {err_str}")
-        return web.Response(text="TTS Error", status=500)
-=======
         logger.error(f"Gemini TTS Error: {e}")
-        return web.json_response({"error": str(e)}, status=500)
->>>>>>> a7b5851b5b3ca49f1912684fa65b29a785da755a
+        return web.json_response({"error": str(e)}, status=505)
 
 async def offer(request):
     try:

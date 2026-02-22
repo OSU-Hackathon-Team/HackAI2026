@@ -630,6 +630,13 @@ export default function InterviewPage() {
               }
             } else if (data.done) {
               setQuestionIndex(data.next_index);
+
+              // Trigger ELO update with the score A returned by the LLM
+              if (data.quality_score !== undefined) {
+                console.log(`[ELO_DEBUG] Received quality_score: ${data.quality_score}`);
+                updateEloScore(data.quality_score);
+              }
+
               if (data.is_finished) {
                 setTimeout(() => handleFinish(), 2000);
               }
@@ -704,139 +711,8 @@ export default function InterviewPage() {
         const perfDelta = scorePerformance(streamData.text);
         updatePressureScore(perfDelta);
 
-<<<<<<< HEAD
-        // 2. Chat for next question (STREAMING), pass current pressure score
-        const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: streamData.text,
-            question_index: questionIndex,
-            session_id: sessionId,
-            timestamp_sec: elapsedSeconds,
-            resume_text: resumeText,
-            job_text: jobText,
-            interviewer_persona: interviewerPersona,
-            pressure_score: pressureScore,
-            pressure_trend: pressureTrend
-          }),
-        });
-
-        if (!chatRes.body) return;
-        const reader = chatRes.body.getReader();
-        const decoder = new TextDecoder();
-
-        addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text: "" });
-
-        let sentenceBuffer = "";
-        let doneMetadata: any = null;
-        let streamBuffer = ""; // Accumulate text across chunks
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          streamBuffer += decoder.decode(value, { stream: true });
-          const lines = streamBuffer.split('\n');
-          // Keep the last incomplete line in the buffer
-          streamBuffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const dataStr = line.slice(6).trim();
-              if (!dataStr || dataStr === '[DONE]') continue;
-
-              let data;
-              try {
-                data = JSON.parse(dataStr);
-              } catch (e) {
-                console.error("Failed to parse SSE JSON:", dataStr, e);
-                continue;
-              }
-
-              if (data.token) {
-                updateLastTranscriptText(data.token);
-                sentenceBuffer += data.token;
-
-                // Trigger TTS for each complete sentence
-                if (/[.!?]$/.test(sentenceBuffer.trim())) {
-                  const fragment = sentenceBuffer.trim();
-                  sentenceBuffer = ""; // Clear for next fragment
-
-                  setIsSpeaking(true);
-                  fetch('http://127.0.0.1:8080/api/tts', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: fragment }),
-                  }).then(r => r.blob()).then(blob => {
-                    if (audioQueueRef.current) {
-                      audioQueueRef.current.add(URL.createObjectURL(blob), fragment);
-                    }
-                  });
-                }
-              } else if (data.done) {
-                doneMetadata = data;
-              }
-            }
-          }
-        }
-
-        // Process any remaining lines in the buffer
-        if (streamBuffer.trim()) {
-          const lines = streamBuffer.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const dataStr = line.slice(6).trim();
-              if (dataStr && dataStr !== '[DONE]') {
-                try {
-                  const data = JSON.parse(dataStr);
-                  if (data.token) {
-                    updateLastTranscriptText(data.token);
-                    sentenceBuffer += data.token;
-                  } else if (data.done) {
-                    doneMetadata = data;
-                    console.log("[DEBUG] Received doneMetadata:", data);
-                  }
-                } catch (e) {
-                  console.error("[DEBUG] Failed to parse SSE data chunk:", dataStr, e);
-                }
-              }
-            }
-          }
-        }
-
-        // Final tail fragment if it didn't end with punctuation
-        if (sentenceBuffer.trim().length > 0) {
-          const fragment = sentenceBuffer.trim();
-          fetch('http://127.0.0.1:8080/api/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: fragment }),
-          }).then(r => r.blob()).then(blob => {
-            if (audioQueueRef.current) {
-              audioQueueRef.current.add(URL.createObjectURL(blob), fragment);
-            }
-          });
-        }
-
-        if (doneMetadata) {
-          setQuestionIndex(doneMetadata.next_index);
-
-          // Trigger ELO update with the score A returned by the LLM
-          if (doneMetadata.quality_score !== undefined) {
-            console.log(`[DEBUG] Received quality_score: ${doneMetadata.quality_score}`);
-            updateEloScore(doneMetadata.quality_score);
-            console.log(`[DEBUG] Store updated. New pressureScore: ${useInterviewStore.getState().pressureScore}`);
-          }
-
-          if (doneMetadata.is_finished) {
-            setTimeout(() => handleFinish(), 2000);
-          }
-        }
-=======
         // 2. Chat for next question (STREAMING)
         await handleChatStream(streamData.text);
->>>>>>> a7b5851b5b3ca49f1912684fa65b29a785da755a
       }
     } catch (err) {
       console.error("Turn processing failed:", err);
