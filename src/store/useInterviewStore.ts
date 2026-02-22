@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { Interviewer } from '@/types/interviewer';
+
 
 export type InterviewPhase = 'upload' | 'initial' | 'connecting' | 'live' | 'processing' | 'finished';
 
@@ -44,6 +46,8 @@ interface InterviewStore {
   pressureTrend: "rising" | "falling" | "stable"; // direction for backend context
   heuristicScore: number;          // Grounded heuristic signal (0..1)
   userId: string | null;           // Clerk user id
+  interviewers: Interviewer[];
+
 
   setPhase: (phase: InterviewPhase) => void;
   setSessionId: (id: string | null) => void;
@@ -66,7 +70,9 @@ interface InterviewStore {
   setCompany: (company: string) => void;
   updateEloScore: (qualityA: number) => void;
   updatePressureScore: (rawScore: number) => void;
+  setInterviewers: (interviewers: Interviewer[]) => void;
   clearSessionData: () => void;
+
   reset: () => void;
 }
 
@@ -96,6 +102,8 @@ export const useInterviewStore = create<InterviewStore>()(
       pressureTrend: "stable",
       heuristicScore: 0.5,
       userId: null,
+      interviewers: [],
+
 
       setPhase: (phase) => set({ phase }),
       setSessionId: (id) => set({ sessionId: id }),
@@ -139,7 +147,9 @@ export const useInterviewStore = create<InterviewStore>()(
       setTranscript: (transcript) => set({ transcript }),
       setRole: (role) => set({ role }),
       setCompany: (company) => set({ company }),
+      setInterviewers: (interviewers) => set({ interviewers }),
       updatePressureScore: (rawScore) => set({ heuristicScore: (rawScore + 1) / 2 }),
+
       updateEloScore: (qualityA) => set((state) => {
         const n = state.questionCount;
         const ELO_BASELINE = 1200;

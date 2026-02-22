@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import dynamic from "next/dynamic";
 import { AvatarHandle } from "@/components/Avatar";
-import { INTERVIEWERS } from "@/types/interviewer";
+
 
 const Avatar = dynamic(() => import("@/components/Avatar"), { ssr: false });
 
@@ -251,6 +251,7 @@ function AvatarPanel({
   interviewerModel: string;
   interviewerName: string;
 }) {
+
   return (
     <div style={{ position: "relative", width: "100%", flex: 1, background: "linear-gradient(135deg, #050508 0%, #0a0a0f 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(202,255,0,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(202,255,0,0.02) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
@@ -528,10 +529,11 @@ export default function InterviewPage() {
     startInterview,
     sessionId, resumeText, jobText, interviewerPersona, interviewerModel, interviewerVoice,
     pressureScore, updatePressureScore, pressureTrend, updateEloScore,
-    userId, role, company, biometrics
+    userId, role, company, biometrics, interviewers
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
   const [gazeScore, setGazeScore] = useState(88);
   const [confidence, setConfidence] = useState(82);
   const [fidget, setFidget] = useState(12);
@@ -1208,8 +1210,9 @@ export default function InterviewPage() {
                 pressureScore={pressureScore}
                 pressureTrend={pressureTrend}
                 interviewerModel={interviewerModel || "/models/business_girl.glb"}
-                interviewerName={INTERVIEWERS.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer"}
+                interviewerName={interviewers.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer"}
               />
+
             </div>
             <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
               <CameraPanel

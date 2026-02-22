@@ -828,6 +828,24 @@ async def get_jobs_handler(request):
                         logger.error(f"Error loading job {filename}: {e}")
     return web.json_response({"jobs": jobs})
 
+async def get_interviewers_handler(request):
+    interviewers_dir = os.path.join(BACKEND_DIR, "prompts", "interviewers")
+    interviewers = []
+    if os.path.exists(interviewers_dir):
+        # Sort files to maintain order if needed, but normally frontend might sort by sector/difficulty
+        for filename in sorted(os.listdir(interviewers_dir)):
+            if filename.endswith(".json"):
+                try:
+                    with open(os.path.join(interviewers_dir, filename), "r") as f:
+                        interviewer_data = json.load(f)
+                        # Ensure ID matches filename just in case
+                        if "id" not in interviewer_data:
+                            interviewer_data["id"] = filename.replace(".json", "")
+                        interviewers.append(interviewer_data)
+                except Exception as e:
+                    logger.error(f"Error loading interviewer {filename}: {e}")
+    return web.json_response({"interviewers": interviewers})
+
 
 async def on_shutdown(app):
     # close peer connections
@@ -880,6 +898,8 @@ if __name__ == "__main__":
         app.router.add_post("/api/save-session", save_session_handler)
         app.router.add_get("/api/get-sessions", get_sessions_handler)
         app.router.add_get("/api/jobs", get_jobs_handler)
+        app.router.add_get("/api/interviewers", get_interviewers_handler)
+
 
 
         # Add CORS to all routes
