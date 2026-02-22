@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import Link from "next/link";
@@ -7,8 +7,12 @@ import { useAuth } from "@clerk/nextjs";
 
 export default function UploadPage() {
   const router = useRouter();
-  const { userId } = useAuth();
-  const { clearSessionData, setResumeText, setJobText, setPhase, setSessionId, addTranscriptEntry, interviewerPersona, role, company } = useInterviewStore();
+  const { userId: clerkUserId } = useAuth();
+  const { clearSessionData, setResumeText, setJobText, setPhase, setSessionId, setUserId, addTranscriptEntry, interviewerPersona, role, company } = useInterviewStore();
+
+  useEffect(() => {
+    if (clerkUserId) setUserId(clerkUserId);
+  }, [clerkUserId, setUserId]);
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [jobText, setJobTextLocal] = useState("");
@@ -44,8 +48,8 @@ export default function UploadPage() {
       }
       formData.append("role", role);
       formData.append("company", company);
-      if (userId) {
-        formData.append("user_id", userId);
+      if (clerkUserId) {
+        formData.append("user_id", clerkUserId);
       }
 
       const res = await fetch("http://127.0.0.1:8080/api/init-session", {

@@ -41,9 +41,12 @@ interface InterviewStore {
   eloDeltas: number[];             // History of last 3 ELO changes for ΔS
   performanceHistory: number[];    // rolling window of last 5 raw scores (A values 0..1)
   pressureTrend: "rising" | "falling" | "stable"; // direction for backend context
+  heuristicScore: number;          // Grounded heuristic signal (0..1)
+  userId: string | null;           // Clerk user id
 
   setPhase: (phase: InterviewPhase) => void;
   setSessionId: (id: string | null) => void;
+  setUserId: (id: string | null) => void;
   setResumeText: (text: string) => void;
   setJobText: (text: string) => void;
   setInterviewerPersona: (persona: string) => void;
@@ -88,9 +91,12 @@ export const useInterviewStore = create<InterviewStore>()(
       eloDeltas: [],
       performanceHistory: [],
       pressureTrend: "stable",
+      heuristicScore: 0.5,
+      userId: null,
 
       setPhase: (phase) => set({ phase }),
       setSessionId: (id) => set({ sessionId: id }),
+      setUserId: (id) => set({ userId: id }),
       setResumeText: (text) => set({ resumeText: text }),
       setJobText: (text) => set({ jobText: text }),
       setInterviewerPersona: (persona) => set({ interviewerPersona: persona }),
@@ -129,9 +135,16 @@ export const useInterviewStore = create<InterviewStore>()(
       setTranscript: (transcript) => set({ transcript }),
       setRole: (role) => set({ role }),
       setCompany: (company) => set({ company }),
+      updatePressureScore: (rawScore) => set({ heuristicScore: (rawScore + 1) / 2 }),
       updateEloScore: (qualityA) => set((state) => {
         const n = state.questionCount;
         const ELO_BASELINE = 1200;
+
+        // Hybrid Strategy: Weighted combination of LLM evaluation and Heuristic ground truth
+        // Weight: 70% LLM, 30% Heuristic
+        const hybridQuality = (qualityA * 0.7) + (state.heuristicScore * 0.3);
+
+        console.log(`[ELO_HYBRID] LLM=${qualityA.toFixed(2)}, Heuristic=${state.heuristicScore.toFixed(2)}, Combined=${hybridQuality.toFixed(2)}`);
 
         // 1. K(n) = 100 / (1 + 0.02 * n) -- Extreme volatility
         const K = 100 / (1 + 0.02 * n);
@@ -139,8 +152,8 @@ export const useInterviewStore = create<InterviewStore>()(
         // 2. E = 1 / (1 + 10^((D - ELO(n)) / 400))
         const E = 1 / (1 + Math.pow(10, (state.difficulty - state.elo) / 400));
 
-        // 3. ELO(n+1) = ELO(n) + K * (qualityA - E)
-        const deltaElo = K * (qualityA - E);
+        // 3. ELO(n+1) = ELO(n) + K * (hybridQuality - E)
+        const deltaElo = K * (hybridQuality - E);
         const newElo = state.elo + deltaElo;
 
         // 4. Update rolling deltas and ΔS (last 3)
@@ -151,8 +164,8 @@ export const useInterviewStore = create<InterviewStore>()(
         const nextDifficulty = newElo + 0.4 * deltaS;
 
         // 6. Normalized Score (0-100)
-        // Sharper divisor (80 instead of 100) makes it extremely jumpy
-        const normalizedScore = (1 / (1 + Math.pow(10, (ELO_BASELINE - newElo) / 80))) * 100;
+        // Sharper divisor (40 instead of 80) makes the HUD much more responsive
+        const normalizedScore = (1 / (1 + Math.pow(10, (ELO_BASELINE - newElo) / 40))) * 100;
 
         const trend: "rising" | "falling" | "stable" =
           deltaElo > 5 ? "rising" :
@@ -171,10 +184,6 @@ export const useInterviewStore = create<InterviewStore>()(
           pressureTrend: trend,
           performanceHistory: [...state.performanceHistory, qualityA].slice(-5)
         };
-      }),
-      updatePressureScore: (rawScore) => set((state) => {
-        // Legacy fallback or combined logic if needed
-        return { pressureScore: state.pressureScore }; // No-op for now as we use ELO
       }),
       clearSessionData: () =>
         set({

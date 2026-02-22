@@ -118,6 +118,16 @@ function HUDMetric({ label, value, color, glowColor }: { label: string; value: n
   );
 }
 
+// ─── PRESSURE GAUGE HELPERS ──────────────────────────────────────────────────
+const getColor = (s: number) => {
+  // Smooth color interpolation
+  if (s < 25) return "#00e096";  // Mint green
+  if (s < 50) return "#caff00";  // Acid green
+  if (s < 70) return "#ffcc00";  // Yellow
+  if (s < 85) return "#ff8800";  // Orange
+  return "#ff2200";               // Red
+};
+
 // ─── PRESSURE GAUGE ───────────────────────────────────────────────────────────
 function PressureGauge({ score, trend }: { score: number; trend: "rising" | "falling" | "stable" }) {
   const getDifficultyLabel = (s: number) => {
@@ -129,16 +139,7 @@ function PressureGauge({ score, trend }: { score: number; trend: "rising" | "fal
     return { label: "ELITE", sub: "MAXIMUM PRESSURE" };
   };
 
-  const getColor = (s: number) => {
-    // Smooth color interpolation
-    if (s < 25) return "#00e096";  // Mint green
-    if (s < 50) return "#caff00";  // Acid green
-    if (s < 70) return "#ffcc00";  // Yellow
-    if (s < 85) return "#ff8800";  // Orange
-    return "#ff2200";               // Red
-  };
-
-  const { label, sub } = getDifficultyLabel(score);
+  const labelData = getDifficultyLabel(score);
   const color = getColor(score);
   const trendIcon = trend === "rising" ? "▲" : trend === "falling" ? "▼" : "─";
   const trendColor = trend === "rising" ? "#ff5500" : trend === "falling" ? "#00e096" : "rgba(255,255,255,0.3)";
@@ -149,8 +150,8 @@ function PressureGauge({ score, trend }: { score: number; trend: "rising" | "fal
         <div style={{ zIndex: 3 }}>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.15em", marginBottom: "0.2rem" }}>DIFFICULTY_ENGINE</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", color, fontWeight: 800, letterSpacing: "0.08em" }}>{label}</span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>{sub}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", color, fontWeight: 800, letterSpacing: "0.08em" }}>{labelData.label}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>{labelData.sub}</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", zIndex: 3 }}>
@@ -185,40 +186,45 @@ function scorePerformance(text: string): number {
   const sig = (x: number, center: number, slope: number) =>
     Math.tanh((x - center) / slope);
 
-  const depthScore = sig(wordCount, 35, 25);
+  const depthScore = sig(wordCount, 20, 15);
   const techKeywords = [
     "algorithm", "complexity", "architecture", "scalability", "latency",
     "throughput", "trade-off", "tradeoff", "distributed", "consistency",
     "availability", "partition", "database", "cache", "api", "microservice",
     "kubernetes", "docker", "ci/cd", "pipeline", "deployed", "implemented",
     "optimized", "refactored", "async", "concurrent", "thread", "memory",
-    "time complexity", "space complexity", "o(n"
+    "time complexity", "space complexity", "o(n",
+    "race condition", "idempotent", "inconsistency", "ingestion", "validation gates",
+    "feature engineering", "scraping", "bottleneck", "deadlock", "idempotency",
+    "eventual consistency", "acid", "normalization", "indexing", "sharding",
+    "load balancer", "replication", "failover", "consensus", "raft", "paxos"
   ];
   const techHits = techKeywords.filter(k => lower.includes(k)).length;
-  const techScore = sig(techHits, 1.5, 1.5);
+  const techScore = sig(techHits, 1.2, 1.2);
 
   const specificityMarkers = [
     "specifically", "for example", "for instance", "such as", "in particular",
     "we used", "i built", "i led", "i reduced", "i increased", "resulted in",
-    "percent", "%", "ms", "seconds", "million", "thousand", "users"
+    "percent", "%", "ms", "seconds", "million", "thousand", "users",
+    "enforcing", "tackle", "separation", "gate", "logic"
   ];
   const numberHits = (text.match(/\b\d+(\.\d+)?[kmb%]?\b/gi) || []).length;
   const specificityHits = specificityMarkers.filter(m => lower.includes(m)).length + numberHits;
-  const specificityScore = sig(specificityHits, 1, 1.2);
+  const specificityScore = sig(specificityHits, 1, 1.0);
 
-  const structureScore = sig(sentenceCount, 2, 1);
+  const structureScore = sig(sentenceCount, 1.5, 0.8);
 
   const fillers = ["um", "uh", "like", "you know", "basically", "kind of", "sort of", "i mean"];
   const fillerCount = fillers.filter(f => lower.includes(f)).length;
   const fillerDensity = fillerCount / Math.max(1, wordCount / 10);
-  const fillerPenalty = Math.tanh(fillerDensity * 3);
+  const fillerPenalty = Math.tanh(fillerDensity * 2.5);
 
   const raw = (
-    depthScore * 0.35 +
-    techScore * 0.30 +
-    specificityScore * 0.20 +
+    depthScore * 0.25 +
+    techScore * 0.45 +      // Increased weight for technical depth
+    specificityScore * 0.15 +
     structureScore * 0.15
-  ) - fillerPenalty * 0.5;
+  ) - fillerPenalty * 0.3;
 
   return Math.max(-1, Math.min(1, raw));
 }
@@ -521,7 +527,8 @@ export default function InterviewPage() {
     liveAlert, setLiveAlert,
     startInterview,
     sessionId, resumeText, jobText, interviewerPersona, interviewerModel,
-    pressureScore, updatePressureScore, pressureTrend, updateEloScore
+    pressureScore, updatePressureScore, pressureTrend, updateEloScore,
+    userId, role, company, biometrics
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -1102,11 +1109,42 @@ export default function InterviewPage() {
   // Removed Mock Logic
 
   // ── Finish ────────────────────────────────────────────────────────────────
-  const handleFinish = () => {
+  const handleFinish = async () => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     dcRef.current?.close();
     pcRef.current?.close();
     finishInterview();
+
+    // Auto-save session if user is logged in
+    if (userId && sessionId) {
+      try {
+        const avgGaze = biometrics.length > 0 ? Math.round(biometrics.reduce((s: number, d: any) => s + (d.gazeScore || 0), 0) / biometrics.length) : 0;
+        const avgConf = biometrics.length > 0 ? Math.round(biometrics.reduce((s: number, d: any) => s + (d.confidence || 0), 0) / biometrics.length) : 0;
+        const avgCalm = biometrics.length > 0 ? Math.round(100 - biometrics.reduce((s: number, d: any) => s + (d.fidgetIndex || 0), 0) / biometrics.length) : 100;
+        const spikeCount = biometrics.filter(d => d.stressSpike).length;
+
+        await fetch("http://127.0.0.1:8080/api/save-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: sessionId,
+            user_id: userId,
+            role: role,
+            company: company,
+            score: Math.round(pressureScore),
+            gaze: avgGaze,
+            confidence: avgConf,
+            composure: avgCalm,
+            spikes: spikeCount,
+            date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          }),
+        });
+        console.log("[DEBUG] Session auto-saved successfully.");
+      } catch (err) {
+        console.error("[DEBUG] Session auto-save failed:", err);
+      }
+    }
+
     setTimeout(() => {
       setPhase("finished");
       router.push(`/report?session_id=${sessionId}`);
@@ -1226,6 +1264,13 @@ export default function InterviewPage() {
               value={fidget}
               color={fidget < 40 ? "#caff00" : "#ff4d6d"}
               glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
+            />
+            <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+            <HUDMetric
+              label="PRESSURE_ELO"
+              value={pressureScore}
+              color={getColor(pressureScore)}
+              glowColor={getColor(pressureScore) + "55"} // Dynamic glow matching pressure
             />
           </div>
         </div>
