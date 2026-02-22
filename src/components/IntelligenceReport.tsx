@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import ReactMarkdown from "react-markdown";
 
 interface IntelligenceReportProps {
@@ -71,7 +72,7 @@ export function IntelligenceReport({ content }: IntelligenceReportProps) {
                         color: "var(--text-dim)"
                     }}>
                         <ReactMarkdown components={{
-                            p: ({ node, ...props }) => <p style={{ marginBottom: "1rem" }} {...props} />,
+                            p: ({ node, ...props }) => <div style={{ marginBottom: "1rem" }} {...props} />,
                             strong: ({ ...props }) => <strong style={{ color: "#fff", fontWeight: 700 }} {...props} />
                         }}>
                             {summarySegment}
@@ -157,7 +158,7 @@ export function IntelligenceReport({ content }: IntelligenceReportProps) {
                                                     color: activeColor,
                                                     marginBottom: "0.75rem",
                                                     marginTop: text === "TIMESTAMP:" ? "0" : "1.5rem",
-                                                    display: "flex",
+                                                    display: "inline-flex",
                                                     alignItems: "center",
                                                     gap: "0.5rem",
                                                     opacity: text === "TIMESTAMP:" ? 1 : 0.4
@@ -168,10 +169,10 @@ export function IntelligenceReport({ content }: IntelligenceReportProps) {
                                         }
                                         return <strong style={{ color: "#fff", fontWeight: 700 }} {...props} />;
                                     },
-                                    p: ({ node, ...props }) => {
-                                        const text = String(props.children);
+                                    p: ({ node, children, ...props }) => {
+                                        const text = React.Children.toArray(children).map(c => typeof c === "string" ? c : "").join("").trim();
                                         // Match simple time strings like 00:01
-                                        if (/^\d{2}:\d{2}$/.test(text.trim())) {
+                                        if (/^\d{2}:\d{2}$/.test(text)) {
                                             return (
                                                 <span style={{
                                                     fontFamily: "var(--font-display)",
@@ -186,12 +187,13 @@ export function IntelligenceReport({ content }: IntelligenceReportProps) {
                                             );
                                         }
                                         return (
-                                            <p style={{
+                                            <div style={{
                                                 color: "var(--text-dim)",
                                                 fontSize: "1.05rem",
                                                 lineHeight: 1.7,
                                                 maxWidth: "600px",
-                                                fontFamily: "var(--font-body)"
+                                                fontFamily: "var(--font-body)",
+                                                marginBottom: "1.5rem"
                                             }} {...props} />
                                         );
                                     }

@@ -8,6 +8,10 @@ import { PythonProvider, usePython } from "react-py";
 import { CodeEditor, ConsoleOutput } from "@/components/CodeEditor";
 
 
+const PYTHON_PACKAGES = {
+  official: ["pyodide-http"]
+};
+
 const Avatar = dynamic(() => import("@/components/Avatar"), { ssr: false });
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
@@ -519,7 +523,7 @@ class AudioQueue {
     }
 
     let attempts = 0;
-    while ((!this.avatarRef?.current || !this.avatarRef.current.isLoaded) && attempts < 100) {
+    while (this.avatarRef?.current && !this.avatarRef.current.isLoaded && attempts < 100) {
       if (attempts % 10 === 0) console.log("[AudioQueue] ⏳ Waiting for avatar to fully load...");
       await new Promise(r => setTimeout(r, 100));
       attempts++;
@@ -605,9 +609,7 @@ function InterviewContent() {
     sendInput,
     interruptExecution
   } = usePython({
-    packages: {
-      official: ["pyodide-http"]
-    }
+    packages: PYTHON_PACKAGES
   });
 
   const avatarRef = useRef<AvatarHandle | null>(null);
@@ -626,6 +628,13 @@ function InterviewContent() {
   const audioQueueRef = useRef<AudioQueue | null>(null);
   const isIntroTriggeredRef = useRef(false);
   const currentTurnIdRef = useRef(0);
+
+  // Clean up AudioQueue on unmount
+  useEffect(() => {
+    return () => {
+      audioQueueRef.current?.stop();
+    };
+  }, []);
 
 
   // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
