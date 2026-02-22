@@ -131,47 +131,33 @@ const getColor = (s: number) => {
 };
 
 // ─── PRESSURE GAUGE ───────────────────────────────────────────────────────────
-function PressureGauge({ score, trend }: { score: number; trend: "rising" | "falling" | "stable" }) {
-  const getDifficultyLabel = (s: number) => {
-    if (s < 20) return { label: "EASY", sub: "SUPPORTIVE" };
-    if (s < 40) return { label: "STANDARD", sub: "WARMING UP" };
-    if (s < 60) return { label: "STANDARD", sub: "PROFESSIONAL" };
-    if (s < 75) return { label: "RIGOROUS", sub: "PRESSING" };
-    if (s < 90) return { label: "ELITE", sub: "EXACTING" };
-    return { label: "ELITE", sub: "MAXIMUM PRESSURE" };
-  };
-
-  const labelData = getDifficultyLabel(score);
+// ─── OVERALL RESPONSE GRADE BAR ──────────────────────────────────────────────
+function OverallGradeBar({ score, trend }: { score: number; trend: "rising" | "falling" | "stable" }) {
   const color = getColor(score);
   const trendIcon = trend === "rising" ? "▲" : trend === "falling" ? "▼" : "─";
-  const trendColor = trend === "rising" ? "#ff5500" : trend === "falling" ? "#00e096" : "rgba(255,255,255,0.3)";
+  const trendColor = trend === "rising" ? "#ff2200" : trend === "falling" ? "#00e096" : "rgba(255,255,255,0.3)";
 
   return (
-    <div style={{ width: "100%", padding: "0.75rem 1.5rem", background: "rgba(0,0,0,0.3)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+    <div style={{ width: "100%", paddingTop: "1rem", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
-        <div style={{ zIndex: 3 }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.15em", marginBottom: "0.2rem" }}>DIFFICULTY_ENGINE</div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", color, fontWeight: 800, letterSpacing: "0.08em" }}>{labelData.label}</span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>{labelData.sub}</span>
-          </div>
+        <div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.6rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.15em" }}>OVERALL RESPONSE GRADE</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", zIndex: 3 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: trendColor, fontWeight: 800 }}>{trendIcon}</span>
-          <span style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color, lineHeight: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.6rem", color: trendColor, fontWeight: 800 }}>{trendIcon}</span>
+          <span style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color, lineHeight: 1, textShadow: `0 0 15px ${color}44` }}>
             {Math.round(score)}<span style={{ fontSize: "0.7rem", opacity: 0.5, marginLeft: "0.1rem" }}>/100</span>
           </span>
         </div>
       </div>
 
-      {/* Track */}
-      <div style={{ height: "3px", width: "100%", background: "rgba(255,255,255,0.06)", borderRadius: "2px", position: "relative", overflow: "hidden", zIndex: 3 }}>
+      <div style={{ height: "4px", width: "100%", background: "rgba(255,255,255,0.08)", borderRadius: "2px", position: "relative", overflow: "hidden" }}>
         <div style={{
           height: "100%",
           width: `${score}%`,
-          background: `linear-gradient(90deg, ${getColor(score * 0.4)}, ${color})`,
+          background: color,
           boxShadow: `0 0 12px ${color}`,
-          transition: "width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94), background 0.8s ease"
+          transition: "width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.8s ease"
         }} />
       </div>
     </div>
@@ -275,10 +261,6 @@ function AvatarPanel({
         <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--success)" : isProcessing ? "var(--accent)" : "rgba(255,255,255,0.3)", fontSize: "0.6rem", letterSpacing: "0.1em" }}>
           {isSpeaking ? "STATUS // TRANSMITTING" : isProcessing ? "STATUS // THINKING" : "STATUS // CAPTURING"}
         </div>
-      </div>
-
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2 }}>
-        <PressureGauge score={pressureScore} trend={pressureTrend} />
       </div>
     </div>
   );
@@ -1527,7 +1509,7 @@ function InterviewContent() {
               boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
               display: "flex",
               flexDirection: "column",
-              gap: "1.5rem"
+              gap: "1rem"
             }}>
               <div style={{
                 display: "flex",
@@ -1555,23 +1537,7 @@ function InterviewContent() {
                   glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
                 />
               </div>
-
-              {/* OVERALL RESPONSE GRADE BAR */}
-              <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "1rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
-                  <span className="label" style={{ fontSize: "0.65rem", letterSpacing: "0.15em", color: "var(--muted)" }}>OVERALL RESPONSE GRADE</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "1rem", color: getColor(pressureScore), textShadow: `0 0 10px ${getColor(pressureScore)}cc` }}>{Math.round(pressureScore)}%</span>
-                </div>
-                <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.08)", borderRadius: "2px", overflow: "hidden" }}>
-                  <div style={{
-                    width: `${pressureScore}%`,
-                    height: "100%",
-                    background: getColor(pressureScore),
-                    boxShadow: `0 0 12px ${getColor(pressureScore)}`,
-                    transition: "width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.5s ease"
-                  }} />
-                </div>
-              </div>
+              <OverallGradeBar score={pressureScore} trend={pressureTrend} />
             </div>
           </div>
         )}
