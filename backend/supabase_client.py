@@ -215,4 +215,44 @@ class SupabaseLogger:
             logger.error(f"Failed to fetch session metadata: {e}")
             return None
 
+    def save_resume(self, user_id: str, resume_text: str, filename: str = None):
+        """
+        Save extracted resume text to user_resumes table.
+        """
+        if not self.supabase or not user_id:
+            return None
+        
+        try:
+            payload = {
+                "user_id": user_id,
+                "resume_text": resume_text,
+                "filename": filename
+            }
+            # We don't use upsert here because users might want a history of resumes, 
+            # though the frontend will mostly look for the latest one.
+            response = self.supabase.table("user_resumes").insert(payload).execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Failed to save resume for user {user_id}: {e}")
+            return None
+
+    def get_latest_resume(self, user_id: str):
+        """
+        Retrieve the most recently uploaded resume text for a user.
+        """
+        if not self.supabase or not user_id:
+            return None
+        
+        try:
+            response = self.supabase.table("user_resumes")\
+                .select("*")\
+                .eq("user_id", user_id)\
+                .order("created_at", desc=True)\
+                .limit(1)\
+                .execute()
+            return response.data[0] if response.data else None
+        except Exception as e:
+            logger.error(f"Failed to fetch latest resume for user {user_id}: {e}")
+            return None
+
 supabase_logger = SupabaseLogger()

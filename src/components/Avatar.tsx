@@ -338,11 +338,26 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
                 const words = text.split(/\s+/).filter(w => w.trim().length > 0);
                 const wtimes: number[] = [];
                 const wdurations: number[] = [];
+
                 if (words.length > 0) {
-                    const wordDur = durationMs / words.length;
+                    // Weight word duration by its character length for a more natural fit
+                    const totalChars = words.reduce((acc, w) => acc + w.length, 0);
+                    let currentTimeMs = 0;
+
                     for (let i = 0; i < words.length; i++) {
-                        wtimes.push(Math.round(i * wordDur));
+                        const wordWeight = words[i].length / totalChars;
+                        const wordDur = wordWeight * durationMs;
+
+                        wtimes.push(Math.round(currentTimeMs));
                         wdurations.push(Math.round(wordDur));
+
+                        currentTimeMs += wordDur;
+                    }
+
+                    // Final safety check: ensure the last word's duration doesn't exceed durationMs
+                    const lastIdx = words.length - 1;
+                    if (wtimes[lastIdx] + wdurations[lastIdx] > durationMs) {
+                        wdurations[lastIdx] = Math.max(0, Math.floor(durationMs - wtimes[lastIdx]));
                     }
                 }
 
