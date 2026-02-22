@@ -526,14 +526,9 @@ export default function InterviewPage() {
     updateLastTranscriptText,
     liveAlert, setLiveAlert,
     startInterview,
-<<<<<<< HEAD
-    sessionId, resumeText, jobText, interviewerPersona, interviewerModel,
+    sessionId, resumeText, jobText, interviewerPersona, interviewerModel, interviewerVoice,
     pressureScore, updatePressureScore, pressureTrend, updateEloScore,
     userId, role, company, biometrics
-=======
-    sessionId, resumeText, jobText, interviewerPersona, interviewerModel, interviewerVoice,
-    pressureScore, updatePressureScore, pressureTrend, updateEloScore
->>>>>>> 3b0d0767bcc4213cc508ad0a6e492da6005b9f5e
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
