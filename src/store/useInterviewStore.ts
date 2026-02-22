@@ -28,6 +28,7 @@ interface InterviewStore {
   transcript: TranscriptEntry[];
   interviewerPersona: string | null;
   interviewerModel: string | null;
+  interviewerVoice: string | null;
   liveAlert: string | null;
   interviewStartTime: number | null;
   aiCoachingReport: string | null;
@@ -48,6 +49,7 @@ interface InterviewStore {
   setJobText: (text: string) => void;
   setInterviewerPersona: (persona: string) => void;
   setInterviewerModel: (model: string) => void;
+  setInterviewerVoice: (voice: string) => void;
   addBiometricPoint: (point: BiometricPoint) => void;
   addTranscriptEntry: (entry: TranscriptEntry) => void;
   updateLastTranscriptText: (text: string) => void;
@@ -74,6 +76,7 @@ export const useInterviewStore = create<InterviewStore>()(
       jobText: null,
       interviewerPersona: "10_data_scientist", // Default
       interviewerModel: "/models/business_girl.glb", // Default
+      interviewerVoice: "Algenib", // Default
       biometrics: [],
       transcript: [],
       liveAlert: null,
@@ -95,6 +98,7 @@ export const useInterviewStore = create<InterviewStore>()(
       setJobText: (text) => set({ jobText: text }),
       setInterviewerPersona: (persona) => set({ interviewerPersona: persona }),
       setInterviewerModel: (model) => set({ interviewerModel: model }),
+      setInterviewerVoice: (voice) => set({ interviewerVoice: voice }),
       addBiometricPoint: (point) =>
         set((state) => ({ biometrics: [...state.biometrics, point] })),
       addTranscriptEntry: (entry) =>
@@ -196,6 +200,7 @@ export const useInterviewStore = create<InterviewStore>()(
           jobText: null,
           interviewerPersona: "10_data_scientist",
           interviewerModel: "/models/business_girl.glb",
+          interviewerVoice: "Algenib",
           biometrics: [],
           transcript: [],
           liveAlert: null,

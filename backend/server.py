@@ -601,7 +601,8 @@ async def chat(request):
 async def tts(request):
     data = await request.json()
     text = data.get('text', '')
-    print(f"[DEBUG] /api/tts hit! Length: {len(text)} chars")
+    voice_name = data.get('voice', 'Puck')
+    print(f"[DEBUG] /api/tts hit! Length: {len(text)} chars, Voice: {voice_name}")
     try:
         gemini = get_gemini_client()
         audio_prompt = f"Please read the following text aloud naturally and professionally:\n\n{text}"
@@ -611,10 +612,17 @@ async def tts(request):
         start_time = asyncio.get_event_loop().time()
         response = await asyncio.wait_for(
             gemini.aio.models.generate_content(
-                model="models/gemini-2.5-pro-preview-tts",
+                model="gemini-2.5-flash-tts",
                 contents=audio_prompt,
                 config=types.GenerateContentConfig(
                     response_modalities=["AUDIO"],
+                    speech_config=types.SpeechConfig(
+                        voice_config=types.VoiceConfig(
+                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                voice_name=voice_name
+                            )
+                        )
+                    )
                 )
             ),
             timeout=30.0

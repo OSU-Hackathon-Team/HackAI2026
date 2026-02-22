@@ -520,7 +520,7 @@ export default function InterviewPage() {
     updateLastTranscriptText,
     liveAlert, setLiveAlert,
     startInterview,
-    sessionId, resumeText, jobText, interviewerPersona, interviewerModel,
+    sessionId, resumeText, jobText, interviewerPersona, interviewerModel, interviewerVoice,
     pressureScore, updatePressureScore, pressureTrend, updateEloScore
   } = useInterviewStore();
 
@@ -634,7 +634,7 @@ export default function InterviewPage() {
                 fetch('http://127.0.0.1:8080/api/tts', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ text: fragmentForTTS }),
+                  body: JSON.stringify({ text: fragmentForTTS, voice: interviewerVoice }),
                 })
                   .then(r => {
                     if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
@@ -676,7 +676,7 @@ export default function InterviewPage() {
         fetch('http://127.0.0.1:8080/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: fragmentForTTS }),
+          body: JSON.stringify({ text: fragmentForTTS, voice: interviewerVoice }),
         })
           .then(r => {
             if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
@@ -1033,7 +1033,7 @@ export default function InterviewPage() {
         fetch('http://127.0.0.1:8080/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, voice: interviewerVoice }),
         }).then(r => r.blob()).then(blob => {
           if (audioQueueRef.current) {
             audioQueueRef.current.add(URL.createObjectURL(blob), text);
@@ -1071,7 +1071,7 @@ export default function InterviewPage() {
         fetch('http://127.0.0.1:8080/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: firstText }),
+          body: JSON.stringify({ text: firstText, voice: interviewerVoice }),
         }).then(r => r.blob()).then(blob => {
           if (audioQueueRef.current) {
             audioQueueRef.current.add(URL.createObjectURL(blob), firstText);
