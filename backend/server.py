@@ -301,6 +301,7 @@ async def init_session(request):
         interviewer_persona_id = ""
         role = "Software Engineer"
         company = "AceIt"
+        user_id = ""
         
         while True:
             part = await reader.next()
@@ -320,6 +321,8 @@ async def init_session(request):
                 role = (await part.read()).decode('utf-8')
             elif part.name == 'company':
                 company = (await part.read()).decode('utf-8')
+            elif part.name == 'user_id':
+                user_id = (await part.read()).decode('utf-8')
 
         # Load persona prompt
         persona_prompt = "You are an expert AI Interviewer."
@@ -349,7 +352,7 @@ async def init_session(request):
         session_id = f"session-{uuid.uuid4().hex[:8]}"
         
         # Save metadata to Supabase
-        supabase_logger.save_session_metadata(session_id, role, company)
+        supabase_logger.save_session_metadata(session_id, role, company, user_id=user_id)
         
         return web.json_response({
             "session_id": session_id,

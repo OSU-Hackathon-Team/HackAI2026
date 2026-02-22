@@ -1,9 +1,15 @@
+-- Drop everything first for a clean state
+drop table if exists public.interview_keyframes cascade;
+drop table if exists public.interview_reports cascade;
+drop table if exists public.interview_sessions cascade;
+drop type if exists public.keyframe_severity cascade;
+
 -- Create an enum for the keyframe severity
-create type keyframe_severity as enum ('critical', 'warning', 'positive', 'neutral');
+create type public.keyframe_severity as enum ('critical', 'warning', 'positive', 'neutral');
 
 create table public.interview_sessions (
   id text primary key,            -- session-xxxx
-  user_id text,                   -- Clerk user id (optional if guest)
+  user_id text,                   -- Clerk user id
   role text,
   company text,
   date text,
