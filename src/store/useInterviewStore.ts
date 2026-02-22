@@ -203,21 +203,14 @@ export const useInterviewStore = create<InterviewStore>()(
       }),
       makeEasier: () => set((state) => {
         const s = state.pressureScore;
-        let eloDrop = 10;
-        if (s < 50) eloDrop = 25;
-        if (s < 10) eloDrop = 50;
+        let drop = 200; // Fixed difficulty drop to ensure AI pivots down
+        if (s < 50) drop = 400;
+        if (s < 10) drop = 600;
 
-        const newElo = Math.max(800, state.elo - eloDrop);
-        const newDifficulty = Math.max(800, state.difficulty - eloDrop);
-
-        // Recalculate pressureScore for immediate feedback
-        const ELO_BASELINE = 1200;
-        const normalizedScore = (1 / (1 + Math.pow(10, (ELO_BASELINE - newElo) / 40))) * 100;
+        const newDifficulty = Math.max(800, state.difficulty - drop);
 
         return {
-          elo: newElo,
           difficulty: newDifficulty,
-          pressureScore: normalizedScore,
           pressureTrend: "falling"
         };
       }),

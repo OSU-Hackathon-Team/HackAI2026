@@ -1287,7 +1287,7 @@ function InterviewContent() {
     if (pressureScore < 50) degree = "moderate difficulty reduction (break the problem into smaller steps, remove ambiguity, add a hint in the question itself)";
     if (pressureScore < 10) degree = "significant difficulty reduction (simplest version of the concept, very explicit instructions, beginner-friendly framing)";
 
-    const systemPrompt = `[SYSTEM: The candidate has requested that the current question be made easier. Please regenerate the current question (or a very similar one) with a ${degree}. Do not apologize, just serve the easier question.]`;
+    const systemPrompt = `[SYSTEM: The candidate has requested that the current question be made easier. Please regenerate the current question (or a very similar one) with a ${degree}. CRITICAL: Maintain a professional, supportive, and non-condescending tone. Do not point out that the question is simpler or comment on the candidate's request; just serve the easier question naturally.]`;
 
     setIsProcessing(true);
     try {
@@ -1549,13 +1549,6 @@ function InterviewContent() {
                 color={fidget < 40 ? "#caff00" : "#ff4d6d"}
                 glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
               />
-              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
-              <HUDMetric
-                label="PRESSURE_ELO"
-                value={pressureScore}
-                color={getColor(pressureScore)}
-                glowColor={getColor(pressureScore) + "55"} // Dynamic glow matching pressure
-              />
             </div>
           </div>
         )}
@@ -1605,7 +1598,6 @@ function InterviewContent() {
                 <HUDMetric label="GAZE" value={gazeScore} color="#00e096" glowColor="rgba(0,224,150,0.2)" />
                 <HUDMetric label="CONF" value={confidence} color="#00e5ff" glowColor="rgba(0,229,255,0.2)" />
                 <HUDMetric label="FIDG" value={fidget} color="#caff00" glowColor="rgba(202,255,0,0.2)" />
-                <HUDMetric label="ELO" value={pressureScore} color={getColor(pressureScore)} glowColor={getColor(pressureScore) + "22"} />
               </div>
             </>
           )}
