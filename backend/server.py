@@ -428,8 +428,8 @@ async def chat(request):
     # Coding challenge logic:
     # Trigger after a few intro/technical questions if tech job.
     # We'll trigger it around question index 3-4.
-    is_coding_phase = False
-    if is_tech:
+    is_coding_phase = data.get('force_coding', False)
+    if not is_coding_phase and is_tech:
         # If difficulty is high, maybe show twice. For now, let's target index 3.
         coding_trigger_indices = [3]
         if pressure_score > 70:

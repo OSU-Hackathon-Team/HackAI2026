@@ -648,7 +648,7 @@ function InterviewContent() {
 
   // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
   // ─── PIPELINE: Handle Chat Stream ──────────────────────────────────────────
-  const handleChatStream = async (inputText: string, ignoreScore: boolean = false) => {
+  const handleChatStream = async (inputText: string, ignoreScore: boolean = false, forceCoding: boolean = false) => {
     if (!sessionId) return;
 
     // Stop any current audio and increment turn ID
@@ -677,7 +677,8 @@ function InterviewContent() {
           pressure_score: pressureScore,
           pressure_trend: pressureTrend,
           history: transcript, // Pass full transcript for context
-          code: code
+          code: code,
+          force_coding: forceCoding
         }),
       });
 
@@ -1204,7 +1205,7 @@ function InterviewContent() {
     }, 2000);
   };
 
-  const handleSkipQuestion = () => {
+  const handleSkipQuestion = async () => {
     // 1. Find the last question asked by the interviewer
     const lastQuestion = [...transcript].reverse().find(e => e.speaker === 'interviewer');
     if (lastQuestion && sessionId) {
@@ -1244,11 +1245,66 @@ function InterviewContent() {
     }
 
     // 3. Trigger a new question from the AI directly
-    const systemPrompt = "[SYSTEM: The user has skipped this question. Please pivot and ask a different, relevant interview question instead.]";
-    handleChatStream(systemPrompt, true);
+    setIsProcessing(true);
+    try {
+      const systemPrompt = "[SYSTEM: The user has skipped this question. Please pivot and ask a different, relevant interview question instead.]";
+      await handleChatStream(systemPrompt, true);
+    } finally {
+      setIsProcessing(false);
+    }
 
     // Add a local notification
     setLiveAlert("Question Skipped. AI is pivoting...");
+    setTimeout(() => setLiveAlert(null), 3000);
+  };
+
+  const handleSkipToCoding = async () => {
+    // 1. Log skip if there was a question
+    const lastQuestion = [...transcript].reverse().find(e => e.speaker === 'interviewer');
+    if (lastQuestion && sessionId) {
+      addSkippedQuestion(lastQuestion.text);
+      fetch("http://127.0.0.1:8080/api/log-skip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          question: lastQuestion.text,
+          timestamp_sec: (Date.now() - (interviewStartTime || Date.now())) / 1000
+        }),
+      }).catch(err => console.error("[DEBUG] Failed to log skip to backend:", err));
+    }
+
+    // 2. Stop recordings/TTS
+    if (isRecording) {
+      if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
+        audioRecorderRef.current.onstop = null;
+        audioRecorderRef.current.stop();
+      }
+      if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+        videoRecorderRef.current.onstop = null;
+        videoRecorderRef.current.stop();
+      }
+      audioRecorderRef.current = null;
+      videoRecorderRef.current = null;
+      audioChunksRef.current = [];
+      videoChunksRef.current = [];
+      setIsRecording(false);
+    }
+    if (audioQueueRef.current) audioQueueRef.current.stop();
+
+    // 3. Force state change and notify AI
+    setIsCodingPhase(true);
+    setQuestionIndex(3); // Targets the coding trigger in backend
+
+    setIsProcessing(true);
+    try {
+      const codingPrompt = "[SYSTEM: The user has requested to skip directly to the live coding challenge. Please acknowledge this and present a relevant Python programming task based on the job requirements and their background. Start the coding phase now.]";
+      await handleChatStream(codingPrompt, true, true);
+    } finally {
+      setIsProcessing(false);
+    }
+
+    setLiveAlert("Initiating Coding Challenge...");
     setTimeout(() => setLiveAlert(null), 3000);
   };
 
@@ -1308,7 +1364,7 @@ function InterviewContent() {
           )}
           {!isCodingPhase && isReady && (
             <button
-              onClick={() => { setIsCodingPhase(true); setQuestionIndex(3); }}
+              onClick={handleSkipToCoding}
               className="btn-primary"
               style={{
                 padding: "0.5rem 1.25rem",
@@ -1318,7 +1374,7 @@ function InterviewContent() {
                 border: "1px solid rgba(202, 255, 0, 0.2)"
               }}
             >
-              DEV: SKIP_TO_CODING
+              Skip to Coding
             </button>
           )}
           <button className="btn-danger" onClick={handleFinish} style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
