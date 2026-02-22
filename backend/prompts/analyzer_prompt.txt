@@ -43,4 +43,16 @@ Provide actionable advice on how to improve this specific moment, both technical
 [Next MM:SS]
 **WHAT YOU DID:**
 ...
+
+# Skill Matrix
+
+```json
+[
+  { "name": "Technical Depth", "value": 85 },
+  { "name": "Communication", "value": 92 },
+  { "name": "Problem Solving", "value": 78 },
+  { "name": "Professionalism", "value": 88 }
+]
+```
+(Provide exactly 4 distinct skills relevant to the candidate's target role, evaluated out of 100 based strictly on your analysis. Ensure the output is valid JSON within the markdown codeblock exactly as shown.)
 ```

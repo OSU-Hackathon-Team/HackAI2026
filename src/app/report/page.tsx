@@ -165,14 +165,14 @@ function PerformanceTrendChart({ data }: { data: any[] }) {
 }
 
 // ─── COMPETENCY BREAKDOWN DONUT ───────────────────────────────────────────────
-const COMPETENCY_DATA = [
-  { name: "Technical Skills", value: 40, color: C.teal },
-  { name: "Communication", value: 30, color: C.purple },
-  { name: "Problem Solving", value: 20, color: "#00a0e9" },
-  { name: "Adaptability", value: 10, color: "#5e45a0" },
+const DEFAULT_COMPETENCY_DATA = [
+  { name: "Technical Depth", value: 100, color: C.teal },
+  { name: "Awaiting Data", value: 0, color: C.purple },
 ];
 
-function CompetencyDonut({ overall }: { overall: number }) {
+function CompetencyDonut({ competencies }: { competencies: any[] }) {
+  const data = competencies && competencies.length > 0 ? competencies : DEFAULT_COMPETENCY_DATA;
+
   return (
     <ChartCard label="COMPETENCY_BREAKDOWN // SKILL MATRIX" delay={200}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -185,12 +185,12 @@ function CompetencyDonut({ overall }: { overall: number }) {
               </filter>
             </defs>
             <Pie
-              data={COMPETENCY_DATA} cx="50%" cy="50%"
+              data={data} cx="50%" cy="50%"
               innerRadius={52} outerRadius={78}
               dataKey="value" paddingAngle={3}
               isAnimationActive={true} animationBegin={200} animationDuration={900} animationEasing="ease-out"
             >
-              {COMPETENCY_DATA.map((entry, i) => (
+              {data.map((entry, i) => (
                 <Cell key={i} fill={entry.color} stroke="rgba(0,0,0,0.3)" strokeWidth={1} />
               ))}
             </Pie>
@@ -199,7 +199,7 @@ function CompetencyDonut({ overall }: { overall: number }) {
         </ResponsiveContainer>
         {/* Legend */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", width: "100%", marginTop: "0.5rem" }}>
-          {COMPETENCY_DATA.map((d) => (
+          {data.map((d) => (
             <div key={d.name} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.color, boxShadow: `0 0 6px ${d.color}` }} />
               <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.62rem", color: C.muted, flex: 1 }}>{d.name.toUpperCase()}</span>
@@ -381,6 +381,27 @@ export default function ReportPage() {
   const spikeCount = safeData.filter((d: any) => d.stressSpike).length;
   const spikeTimestamps = new Set(safeData.filter((d: any) => d.stressSpike).map((d: any) => d.time));
 
+  // Parse custom skills from aiCoachingReport if available
+  let parsedCompetencies: any[] = [];
+  if (aiCoachingReport) {
+    try {
+      const match = aiCoachingReport.match(/```json\s*([\s\S]*?)\s*```/);
+      if (match && match[1]) {
+        const parsed = JSON.parse(match[1]);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const defaultColors = [C.teal, C.purple, "#00a0e9", "#5e45a0"];
+          parsedCompetencies = parsed.map((sk: any, i: number) => ({
+            name: sk.name || `Skill ${i + 1}`,
+            value: sk.value || 0,
+            color: defaultColors[i % defaultColors.length]
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn("Could not parse AI skill matrix", e);
+    }
+  }
+
   const recommendation = overall >= 70 ? "PROCEED TO NEXT ROUND" : overall >= 50 ? "UNDER REVIEW" : "NOT RECOMMENDED";
   const recColor = overall >= 70 ? C.green : overall >= 50 ? C.teal : C.danger;
 
@@ -470,7 +491,7 @@ export default function ReportPage() {
         {/* ── THREE CHART CARDS ── */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "2.5rem" }}>
           <PerformanceTrendChart data={safeData} />
-          <CompetencyDonut overall={overall} />
+          <CompetencyDonut competencies={parsedCompetencies} />
           <ScoreComparisonChart overall={overall} />
         </div>
 
