@@ -477,6 +477,7 @@ class AudioQueue {
   private isStreamStarted = false;
   private turnEnded = false;
   private expectedEndTime = 0;
+  private isFinishing = false;
 
   constructor(onEnd: () => void, avatarRef: React.RefObject<AvatarHandle | null>) {
     this.onEnd = onEnd;
@@ -489,31 +490,46 @@ class AudioQueue {
   }
 
   signalEndTurn() {
+    if (this.turnEnded) return; // Prevent double firing
     this.turnEnded = true;
     if (!this.isPlaying && this.queue.length === 0) {
+      this.isPlaying = false;
       this.finishStream();
     }
   }
 
   private async finishStream() {
-    const waitTime = this.expectedEndTime - Date.now();
+    if (this.isFinishing) return;
+    this.isFinishing = true;
+
+    if (!this.isStreamStarted) {
+      this.onEnd();
+      this.turnEnded = false;
+      this.isFinishing = false;
+      return;
+    }
+
+    const waitTime = this.expectedEndTime - Date.now() + 500;
     if (waitTime > 0) {
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
 
-    if (this.isStreamStarted && this.avatarRef?.current) {
+    if (this.avatarRef?.current) {
       this.avatarRef.current.endStream();
       this.isStreamStarted = false;
     }
     this.onEnd();
     this.turnEnded = false;
+    this.isFinishing = false;
   }
 
   private async playNext() {
     if (!this.queue || this.queue.length === 0) {
-      this.isPlaying = false;
-      if (this.turnEnded) {
-        this.finishStream();
+      if (this.turnEnded && this.isPlaying) {
+        this.isPlaying = false;
+        await this.finishStream();
+      } else {
+        this.isPlaying = false;
       }
       return;
     }
@@ -613,16 +629,16 @@ export default function InterviewPage() {
   const handleChatStream = async (inputText: string, ignoreScore: boolean = false) => {
     if (!sessionId) return;
 
+    // Stop any current audio and increment turn ID
+    if (audioQueueRef.current) audioQueueRef.current.stop();
+    avatarRef.current?.stop();
+    const turnId = ++currentTurnIdRef.current;
+
     try {
       // Ensure AudioQueue is initialized so we don't blink/miss first fragment
       if (!audioQueueRef.current) {
         audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
       }
-
-      // Stop any current audio and increment turn ID
-      audioQueueRef.current.stop();
-      avatarRef.current?.stop();
-      const turnId = ++currentTurnIdRef.current;
 
       // Chat for next question (STREAMING), pass current pressure score
       const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
@@ -736,6 +752,10 @@ export default function InterviewPage() {
     } catch (err) {
       console.error("Chat stream handling failed:", err);
       setLiveAlert("AI response failed. Please try recording again.");
+    } finally {
+      if (audioQueueRef.current && turnId === currentTurnIdRef.current) {
+        audioQueueRef.current.signalEndTurn();
+      }
     }
   };
 
@@ -1054,10 +1074,12 @@ export default function InterviewPage() {
     }
   };
 
-  // ── Countdown logic is now handled by handleStartInterviewCountdown ─────────
+  // ── Timer + Phase Logic ──────────────────────────────────────────────────
   useEffect(() => {
-    // Removed automatic countdown on phase change
-  }, [phase]);
+    if (!isReady) return;
+    const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isReady]);
 
   useEffect(() => { if (phase === "live") setIsReady(true); }, [phase]);
 
@@ -1089,15 +1111,8 @@ export default function InterviewPage() {
           audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
         }
         setIsSpeaking(true);
-        fetch('http://127.0.0.1:8080/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: firstText }),
-        }).then(r => r.blob()).then(blob => {
-          if (audioQueueRef.current) {
-            audioQueueRef.current.add(firstText);
-          }
-        });
+        audioQueueRef.current.add(firstText);
+        audioQueueRef.current.signalEndTurn();
       }
     }
   }, [isReady]);
