@@ -18,6 +18,9 @@ export interface BiometricPoint {
   fidgetIndex: number;
   fillerCount?: number;
   tone?: number;
+  wpm?: number;
+  pitchStability?: number;
+  frequency?: number;
   stressSpike: boolean;
 }
 
