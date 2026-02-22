@@ -612,7 +612,7 @@ async def tts(request):
         start_time = asyncio.get_event_loop().time()
         response = await asyncio.wait_for(
             gemini.aio.models.generate_content(
-                model="gemini-2.5-flash-tts",
+                model="models/gemini-2.5-flash-preview-tts",
                 contents=audio_prompt,
                 config=types.GenerateContentConfig(
                     response_modalities=["AUDIO"],
