@@ -584,9 +584,6 @@ function InterviewContent() {
   const [gazeScore, setGazeScore] = useState(100);
   const [confidence, setConfidence] = useState(100);
   const [fidget, setFidget] = useState(100);
-  const [wpm, setWpm] = useState(0);
-  const [pitchStability, setPitchStability] = useState(90);
-  const [frequency, setFrequency] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -1065,14 +1062,7 @@ function InterviewContent() {
           }
           if (msg.type === "audio_inference") {
             const audioConf = Math.round(msg.confidence * 100);
-            const msgWpm = Math.round(msg.wpm || 0);
-            const msgPitch = Math.round((msg.pitch_stability || 0) * 100);
-            const msgFreq = Math.round(msg.frequency || 0);
-
             setConfidence(prev => Math.round((prev + audioConf) / 2));
-            setWpm(msgWpm);
-            setPitchStability(msgPitch);
-            setFrequency(msgFreq);
 
             if (msg.transcript?.trim()) {
               addTranscriptEntry({ time: elapsedSeconds, speaker: "user", text: msg.transcript.trim() });
@@ -1084,9 +1074,6 @@ function InterviewContent() {
               gazeScore,
               confidence: audioConf,
               fidgetIndex: fidget,
-              wpm: msgWpm,
-              pitchStability: msgPitch,
-              frequency: msgFreq,
               stressSpike: audioConf < 40
             });
           }
@@ -1568,19 +1555,6 @@ function InterviewContent() {
                   glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
                 />
               </div>
-              <HUDMetric
-                label="VOCAL_PACE_WPM"
-                value={wpm}
-                color={wpm > 100 && wpm < 160 ? "#00e096" : "#ffcc00"}
-                glowColor={wpm > 100 && wpm < 160 ? "rgba(0,224,150,0.4)" : "rgba(255,204,0,0.3)"}
-              />
-              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
-              <HUDMetric
-                label="PITCH_STABILITY"
-                value={pitchStability}
-                color={pitchStability > 70 ? "#00e5ff" : "#ff4d6d"}
-                glowColor={pitchStability > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,77,109,0.3)"}
-              />
               <OverallGradeBar score={pressureScore} trend={pressureTrend} />
             </div>
           </div>

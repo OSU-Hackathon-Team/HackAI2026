@@ -189,56 +189,6 @@ function PerformanceTrendChart({ data }: { data: any[] }) {
 }
 
 
-// ─── COMPETENCY BREAKDOWN RADAR ───────────────────────────────────────────────
-const DEFAULT_COMPETENCY_DATA = [
-  { name: "Technical Depth", value: 100, color: C.teal },
-  { name: "Awaiting Data", value: 0, color: C.purple },
-];
-
-function CompetencyDonut({ competencies }: { competencies: any[] }) {
-  const data = competencies && competencies.length > 0 ? competencies : DEFAULT_COMPETENCY_DATA;
-
-  return (
-    <ChartCard label="COMPETENCY_BREAKDOWN // SKILL MATRIX" delay={200}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <ResponsiveContainer width="100%" height={220}>
-          <RadarChart data={data} cx="50%" cy="50%" outerRadius={70}>
-            <PolarGrid stroke={C.muted} />
-            <PolarAngleAxis
-              dataKey="name"
-              tick={{ fill: C.teal, fontSize: 9, fontFamily: "var(--font-mono)" }}
-            />
-            <PolarRadiusAxis
-              angle={30}
-              domain={[0, 100]}
-              tick={false}
-              axisLine={false}
-            />
-            <Tooltip content={<HudTooltip />} />
-            <Radar
-              name="Skill Matrix"
-              dataKey="value"
-              stroke={C.teal}
-              fill={C.teal}
-              fillOpacity={0.4}
-              isAnimationActive={true}
-            />
-          </RadarChart>
-        </ResponsiveContainer>
-        {/* Legend */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", width: "100%", marginTop: "0.5rem" }}>
-          {data.map((d) => (
-            <div key={d.name} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.color, boxShadow: `0 0 6px ${d.color}` }} />
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: C.muted, flex: 1 }}>{d.name.toUpperCase()}</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: d.color }}>{d.value}%</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </ChartCard>
-  );
-}
 
 // ─── SCORE COMPARISON BAR CHART ───────────────────────────────────────────────
 function ScoreComparisonChart({ overall }: { overall: number }) {
@@ -279,24 +229,20 @@ function ScoreComparisonChart({ overall }: { overall: number }) {
 
 // ─── COMMUNICATION ANALYSIS ───────────────────────────────────────────────────
 function CommunicationAnalysis({ biometrics }: { biometrics: any[] }) {
-  const avgWpm = biometrics.length > 0 ? Math.round(biometrics.reduce((s, d) => s + (d.wpm || 0), 0) / biometrics.length) : 145;
   const fillers = biometrics.reduce((s, d) => s + (d.fillerCount || 0), 0) || 4;
-  const avgPitch = biometrics.length > 0 ? Math.round(biometrics.reduce((s, d) => s + (d.pitchStability || 0), 0) / biometrics.length) : 85;
 
   return (
-    <ChartCard label="COMMUNICATION_ANALYSIS // VOCAL STAMINA" delay={400}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-        <div className="hud-card" style={{ padding: "1rem", border: "none", background: "rgba(0,0,0,0.2)" }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: C.muted, letterSpacing: "0.1em" }}>AVG_PACING</div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", color: C.teal }}>{avgWpm} <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>WPM</span></div>
+    <ChartCard label="COMMUNICATION_ANALYSIS // VERBAL LINT" delay={400}>
+      <div style={{ display: "flex", gap: "1rem" }}>
+        <div className="hud-card" style={{ padding: "1.5rem", border: "none", background: "rgba(0,0,0,0.2)", flex: 1 }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: C.muted, letterSpacing: "0.1em" }}>TOTAL_FILLER_WORDS</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: "2rem", color: C.pink }}>{fillers} <span style={{ fontSize: "0.8rem", opacity: 0.5 }}>DETECTED</span></div>
         </div>
-        <div className="hud-card" style={{ padding: "1rem", border: "none", background: "rgba(0,0,0,0.2)" }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: C.muted, letterSpacing: "0.1em" }}>FILLER_COUNT</div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", color: C.pink }}>{fillers} <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>TOTAL</span></div>
-        </div>
-        <div className="hud-card" style={{ padding: "1rem", border: "none", background: "rgba(0,0,0,0.2)", gridColumn: "span 2" }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: C.muted, letterSpacing: "0.1em" }}>PITCH_STABILITY_INDEX</div>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", color: C.green }}>{avgPitch}% <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>CONSISTENCY</span></div>
+        <div className="hud-card" style={{ padding: "1.5rem", border: "none", background: "rgba(0,0,0,0.2)", flex: 1 }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: C.muted, letterSpacing: "0.1em" }}>COMMUNICATION_STATUS</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: "1.2rem", color: fillers < 5 ? C.teal : C.pink, marginTop: "0.5rem" }}>
+            {fillers < 5 ? "SYNTACTIC_CLARITY_OPTIMAL" : "SYNTACTIC_NOISE_DETECTED"}
+          </div>
         </div>
       </div>
     </ChartCard>
@@ -429,26 +375,6 @@ export default function ReportPage() {
   const spikeCount = safeData.filter((d: any) => d.stressSpike).length;
   const spikeTimestamps = new Set(safeData.filter((d: any) => d.stressSpike).map((d: any) => d.time));
 
-  // Parse custom skills from aiCoachingReport if available
-  let parsedCompetencies: any[] = [];
-  if (aiCoachingReport) {
-    try {
-      const match = aiCoachingReport.match(/```json\s*([\s\S]*?)\s*```/);
-      if (match && match[1]) {
-        const parsed = JSON.parse(match[1]);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const defaultColors = [C.teal, C.purple, "#00a0e9", "#5e45a0"];
-          parsedCompetencies = parsed.map((sk: any, i: number) => ({
-            name: sk.name || `Skill ${i + 1}`,
-            value: sk.value || 0,
-            color: defaultColors[i % defaultColors.length]
-          }));
-        }
-      }
-    } catch (e) {
-      console.warn("Could not parse AI skill matrix", e);
-    }
-  }
 
   const recommendation = overall >= 70 ? "PROCEED TO NEXT ROUND" : overall >= 50 ? "UNDER REVIEW" : "NOT RECOMMENDED";
   const recColor = overall >= 70 ? C.green : overall >= 50 ? C.teal : C.danger;
@@ -547,14 +473,14 @@ export default function ReportPage() {
           <StatChip label="STRESS_EVENTS" value={`${spikeCount}`} color={spikeCount > 2 ? C.danger : C.muted} />
         </div>
 
-        {/* ── FIVE CHART CARDS ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1.5rem", marginBottom: "2.5rem" }}>
+        {/* ── CHARTS ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "2.5rem" }}>
           <PerformanceTrendChart data={safeData} />
-          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-            <CompetencyDonut competencies={parsedCompetencies} />
-            <CommunicationAnalysis biometrics={safeData} />
-          </div>
           <ScoreComparisonChart overall={overall} />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.5rem", marginBottom: "2.5rem" }}>
+          <CommunicationAnalysis biometrics={safeData} />
         </div>
 
         {/* ── SKIPPED QUESTIONS ── */}
