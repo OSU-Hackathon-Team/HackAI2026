@@ -530,14 +530,14 @@ export default function InterviewPage() {
     startInterview,
     sessionId, resumeText, jobText, interviewerPersona, interviewerModel, interviewerVoice,
     pressureScore, updatePressureScore, pressureTrend, updateEloScore,
-    userId, role, company, biometrics, interviewers, addSkippedQuestion, skippedQuestions, interviewStartTime
+    userId, role, company, biometrics, interviewers, addSkippedQuestion, skippedQuestions, interviewStartTime, makeEasier
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  const [gazeScore, setGazeScore] = useState(88);
-  const [confidence, setConfidence] = useState(82);
-  const [fidget, setFidget] = useState(12);
+  const [gazeScore, setGazeScore] = useState(100);
+  const [confidence, setConfidence] = useState(100);
+  const [fidget, setFidget] = useState(100);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -984,8 +984,8 @@ export default function InterviewPage() {
           const msg = JSON.parse(event.data);
           if (msg.type === "video_inference") {
             const conf = Math.round(msg.confidence * 100);
-            const msgGaze = msg.gaze !== undefined ? Math.round(msg.gaze * 100) : 88;
-            const msgFidget = msg.fidget !== undefined ? Math.round(msg.fidget * 100) : 12;
+            const msgGaze = msg.gaze !== undefined ? Math.round(msg.gaze * 100) : 100;
+            const msgFidget = msg.fidget !== undefined ? Math.round(msg.fidget * 100) : 100;
 
             setConfidence(conf);
             setGazeScore(msgGaze);
@@ -1202,6 +1202,44 @@ export default function InterviewPage() {
     setTimeout(() => setLiveAlert(null), 3000);
   };
 
+  const handleMakeEasier = () => {
+    // 1. Stop any active recording/TTS
+    if (isRecording) {
+      if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
+        audioRecorderRef.current.onstop = null;
+        audioRecorderRef.current.stop();
+      }
+      if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+        videoRecorderRef.current.onstop = null;
+        videoRecorderRef.current.stop();
+      }
+      audioRecorderRef.current = null;
+      videoRecorderRef.current = null;
+      audioChunksRef.current = [];
+      videoChunksRef.current = [];
+      setIsRecording(false);
+    }
+    if (audioQueueRef.current) {
+      audioQueueRef.current.stop();
+    }
+
+    // 2. Adjust ELO in store
+    makeEasier();
+
+    // 3. Determine degree of simplification based on CURRENT pressureScore (before state update reflecting in UI)
+    let degree = "slight difficulty reduction (simpler wording, fewer edge cases, more guided structure)";
+    if (pressureScore < 50) degree = "moderate difficulty reduction (break the problem into smaller steps, remove ambiguity, add a hint in the question itself)";
+    if (pressureScore < 10) degree = "significant difficulty reduction (simplest version of the concept, very explicit instructions, beginner-friendly framing)";
+
+    const systemPrompt = `[SYSTEM: The candidate has requested that the current question be made easier. Please regenerate the current question (or a very similar one) with a ${degree}. Do not apologize, just serve the easier question.]`;
+
+    handleChatStream(systemPrompt, true);
+
+    // Add a local notification
+    setLiveAlert("Simplifying question...");
+    setTimeout(() => setLiveAlert(null), 3000);
+  };
+
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60).toString().padStart(2, "0");
     const sec = (s % 60).toString().padStart(2, "0");
@@ -1238,23 +1276,42 @@ export default function InterviewPage() {
         </div>
         <div style={{ display: "flex", gap: "0.75rem" }}>
           {isReady && (
-            <button
-              onClick={handleSkipQuestion}
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-                padding: "0.5rem 1.25rem",
-                fontSize: "0.8rem",
-                borderRadius: "4px",
-                cursor: "pointer",
-                transition: "all 0.2s ease"
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-            >
-              Skip Question
-            </button>
+            <>
+              <button
+                onClick={handleMakeEasier}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text)",
+                  padding: "0.5rem 1.25rem",
+                  fontSize: "0.8rem",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+              >
+                Make Easier
+              </button>
+              <button
+                onClick={handleSkipQuestion}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text)",
+                  padding: "0.5rem 1.25rem",
+                  fontSize: "0.8rem",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+              >
+                Skip Question
+              </button>
+            </>
           )}
           <button className="btn-danger" onClick={handleFinish} style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
             End Interview
