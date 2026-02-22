@@ -346,8 +346,13 @@ export default function ReportPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingReport, setIsFetchingReport] = useState(false);
   const [sessionDetails, setSessionDetails] = useState<any>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
-  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const searchParams = isMounted && typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const urlSessionId = searchParams?.get("session_id");
   const autoSave = searchParams?.get("auto_save");
 

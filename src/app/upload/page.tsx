@@ -3,10 +3,12 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import Link from "next/link";
+import { useAuth } from "@clerk/nextjs";
 
 export default function UploadPage() {
   const router = useRouter();
-  const { setResumeText, setJobText, setPhase, setSessionId, addTranscriptEntry, interviewerPersona, role, company } = useInterviewStore();
+  const { userId } = useAuth();
+  const { clearSessionData, setResumeText, setJobText, setPhase, setSessionId, addTranscriptEntry, interviewerPersona, role, company } = useInterviewStore();
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [jobText, setJobTextLocal] = useState("");
@@ -31,6 +33,7 @@ export default function UploadPage() {
   const handleSubmit = async () => {
     if (!resumeFile || !jobText.trim()) return;
     setIsLoading(true);
+    clearSessionData();
 
     try {
       const formData = new FormData();
@@ -41,6 +44,9 @@ export default function UploadPage() {
       }
       formData.append("role", role);
       formData.append("company", company);
+      if (userId) {
+        formData.append("user_id", userId);
+      }
 
       const res = await fetch("http://127.0.0.1:8080/api/init-session", {
         method: "POST",
@@ -54,13 +60,6 @@ export default function UploadPage() {
       setResumeText(data.resume_text);
       setJobText(data.job_text);
       setSessionId(data.session_id);
-
-      // Store the first question in the transcript
-      addTranscriptEntry({
-        time: 0,
-        speaker: "interviewer",
-        text: data.first_question
-      });
 
       setPhase("connecting");
       router.push("/interview");

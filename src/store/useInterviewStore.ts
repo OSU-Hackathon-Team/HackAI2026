@@ -64,6 +64,7 @@ interface InterviewStore {
   setCompany: (company: string) => void;
   updateEloScore: (qualityA: number) => void;
   updatePressureScore: (rawScore: number) => void;
+  clearSessionData: () => void;
   reset: () => void;
 }
 
@@ -172,10 +173,25 @@ export const useInterviewStore = create<InterviewStore>()(
           performanceHistory: [...state.performanceHistory, qualityA].slice(-5)
         };
       }),
+<<<<<<< HEAD
       updatePressureScore: (rawScore) => set((state) => {
         // Legacy fallback or combined logic if needed
         return { pressureScore: state.pressureScore }; // No-op for now as we use ELO
       }),
+=======
+      clearSessionData: () =>
+        set({
+          sessionId: null,
+          biometrics: [],
+          transcript: [],
+          liveAlert: null,
+          interviewStartTime: null,
+          aiCoachingReport: null,
+          pressureScore: 50,
+          performanceHistory: [],
+          pressureTrend: "stable",
+        }),
+>>>>>>> a7b5851b5b3ca49f1912684fa65b29a785da755a
       reset: () =>
         set({
           phase: "upload",

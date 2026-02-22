@@ -27,6 +27,8 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
 from supabase_client import supabase_logger
 from openai import OpenAI, AsyncOpenAI
+from google import genai
+from google.genai import types
 from scipy.interpolate import interp1d
 import cv2
 import torch
@@ -53,6 +55,13 @@ try:
         if _async_client is None:
             _async_client = AsyncOpenAI()
         return _async_client
+        
+    _gemini_client = None
+    def get_gemini_client():
+        global _gemini_client
+        if _gemini_client is None:
+            _gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+        return _gemini_client
         
     analyzer_engine = InterviewAnalyzerEngine()
     print("Backend initialization successful (Models, API clients, & Analyzer ready)")
@@ -285,66 +294,65 @@ async def stream_process(request):
         return web.json_response({"error": str(e)}, status=500)
 
 async def init_session(request):
-    reader = await request.multipart()
-    resume_text = ""
-    job_description = ""
-    interviewer_persona_id = ""
-    role = "Software Engineer"
-    company = "AceIt"
-    
-    while True:
-        part = await reader.next()
-        if part is None: break
-        if part.name == 'resume':
-            filename = part.filename
-            content = await part.read()
-            if filename.endswith('.pdf'):
-                resume_text = extract_text_from_pdf(content)
-            else:
-                resume_text = content.decode('utf-8', errors='ignore')
-        elif part.name == 'job_description':
-            job_description = (await part.read()).decode('utf-8')
-        elif part.name == 'interviewer_persona':
-            interviewer_persona_id = (await part.read()).decode('utf-8')
-        elif part.name == 'role':
-            role = (await part.read()).decode('utf-8')
-        elif part.name == 'company':
-            company = (await part.read()).decode('utf-8')
-
-    # Load persona prompt
-    persona_prompt = "You are an expert AI Interviewer."
-    if interviewer_persona_id:
-        persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
-        if os.path.exists(persona_path):
-            with open(persona_path, 'r') as f:
-                persona_prompt = f.read()
-
-    system_prompt = (
-        f"{persona_prompt}\n\n"
-        "Based on the candidate's resume and the job description, "
-        "introduce yourself briefly and ask an introductory question about their background. "
-        "Keep it professional and concise (under 3 sentences)."
-    )
-    user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
-    
     try:
-        completion = await get_async_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        reader = await request.multipart()
+        resume_text = ""
+        job_description = ""
+        interviewer_persona_id = ""
+        role = "Software Engineer"
+        company = "AceIt"
+        user_id = ""
+        
+        while True:
+            part = await reader.next()
+            if part is None: break
+            if part.name == 'resume':
+                filename = getattr(part, 'filename', '') or ''
+                content = await part.read()
+                if filename.endswith('.pdf'):
+                    resume_text = extract_text_from_pdf(content)
+                else:
+                    resume_text = content.decode('utf-8', errors='ignore')
+            elif part.name == 'job_description':
+                job_description = (await part.read()).decode('utf-8')
+            elif part.name == 'interviewer_persona':
+                interviewer_persona_id = (await part.read()).decode('utf-8')
+            elif part.name == 'role':
+                role = (await part.read()).decode('utf-8')
+            elif part.name == 'company':
+                company = (await part.read()).decode('utf-8')
+            elif part.name == 'user_id':
+                user_id = (await part.read()).decode('utf-8')
+
+        # Load persona prompt
+        persona_prompt = "You are an expert AI Interviewer."
+        if interviewer_persona_id:
+            persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
+            if os.path.exists(persona_path):
+                with open(persona_path, 'r') as f:
+                    persona_prompt = f.read()
+
+        system_prompt = (
+            f"{persona_prompt}\n\n"
+            "Based on the candidate's resume and the job description, "
+            "introduce yourself briefly and ask an introductory question about their background. "
+            "Keep it professional and concise (under 3 sentences)."
         )
-        first_question = completion.choices[0].message.content
+        user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
+        
         session_id = f"session-{uuid.uuid4().hex[:8]}"
         
-        # Save metadata to Supabase
-        supabase_logger.save_session_metadata(session_id, role, company)
+        # Save metadata to Supabase (Initial)
+        supabase_logger.save_session_metadata(session_id, role, company, user_id=user_id)
         
         return web.json_response({
             "session_id": session_id,
-            "first_question": first_question,
             "resume_text": resume_text,
             "job_text": job_description
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return web.json_response({"error": str(e)}, status=500)
 
 async def chat(request):
@@ -363,6 +371,8 @@ async def chat(request):
     pressure_score = data.get('pressure_score', 50)
     pressure_trend = data.get('pressure_trend', 'stable')  # 'rising' | 'falling' | 'stable'
 
+    print(f"[DEBUG] /api/chat hit! session={session_id}, text='{user_text[:50]}...', index={question_index}")
+    
     # Load base persona prompt
     persona_prompt = "You are a professional technical interviewer for AceIt."
     if interviewer_persona_id:
@@ -440,8 +450,20 @@ async def chat(request):
         "At the VERY END of your response, you MUST output a score tag in this EXACT format: [SCORE: 0.95] (using your calculated value between 0.0 and 1.0). "
         "DO NOT SKIP THIS TAG."
     )
-    # 260 seconds = ~4 mins 20 secs, leaving time for the final AI speech to hit exactly 5 mins
-    if float(timestamp_sec) < 260.0:
+    # Determine if this is the start of the interview (no user text yet)
+    is_initial = not user_text.strip()
+    
+    if is_initial:
+        # ── INITIAL PROMPT: INTRODUCTION ──────────────────────────────────────────
+        prompt = (
+            "You are an technical interviewer. Please introduce yourself briefly (name/role) "
+            "based on your persona, then ask a strong introductory question about the candidate's "
+            "background or their interest in the role."
+        )
+        is_finished = False
+        next_index = 0
+    elif float(timestamp_sec) < 260.0:
+        # ── INTERMEDIATE PROMPT: TECHNICAL FOLLOW-UP ───────────────────────────────
         prompt = (
             f"The candidate said: '{user_text}'. React to their answer in one sentence, "
             "then ask a technical follow-up question. The question MUST ask them how they "
@@ -450,6 +472,7 @@ async def chat(request):
         is_finished = False
         next_index = question_index + 1
     else:
+        # ── FINAL PROMPT: CONCLUSION ──────────────────────────────────────────────
         prompt = (
             f"The candidate said: '{user_text}'. React to their answer in one sentence, "
             "then thank them and professionally conclude the interview."
@@ -467,20 +490,29 @@ async def chat(request):
 
     full_ai_response = ""
     try:
-        # Use stream=True for token-by-token delivery
-        stream = await get_async_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
-            stream=True
+        # Use stream=True for token-by-token delivery via Gemini
+        gemini = get_gemini_client()
+        stream = await gemini.aio.models.generate_content_stream(
+            model="models/gemini-3-flash-preview",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+            )
         )
 
+        print(f"[DEBUG] Starting Gemini stream for session={session_id}...")
         async for chunk in stream:
-            if chunk.choices[0].delta.content:
-                content = chunk.choices[0].delta.content
+            if chunk.text:
+                content = chunk.text
                 full_ai_response += content
+                safe_content = content[:20].replace('\n', ' ')
+                print(f"[DEBUG] Sending token: '{safe_content}...'")
                 # SSE Format: data: <payload>\n\n
                 await response.write(f"data: {json.dumps({'token': content})}\n\n".encode())
+            else:
+                print(f"[DEBUG] Received empty or non-text chunk from Gemini")
 
+<<<<<<< HEAD
         # Extract the score from the full response
         quality_score = 0.5 # Default
         import re
@@ -532,30 +564,40 @@ async def chat(request):
 
         # Send metadata at the end including the quality score A
         await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
+=======
+        # Send metadata at the end
+        print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}")
+        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
+>>>>>>> a7b5851b5b3ca49f1912684fa65b29a785da755a
 
-        # Log to Supabase and trigger analysis in the background after stream
-        if session_id:
-            supabase_logger.log_keyframe(
-                session_id=session_id,
-                timestamp_sec=float(timestamp_sec),
-                interviewer_question=f"Dynamic Question {question_index}",
-                associated_transcript=user_text,
-                ai_response=full_ai_response,
-                keyframe_reason=f"AI Turn - Q{question_index + 1}"
-            )
-            
-            async def run_analysis():
-                try:
-                    print(f"[DEBUG] Waiting for background metrics to finish for {session_id}...")
-                    await asyncio.sleep(3) # Wait for run_metrics_background to finish
-                    report = await analyzer_engine.generate_report(session_id, "Standard Technical Interviewer")
-                    # Save the report markdown to Supabase
+        # ── BACKGROUND: Supabase Logging & Analysis ──
+        # We wrap this in a top-level task so the SSE stream can end independently
+        async def finalize_turn_async():
+            try:
+                if session_id:
+                    # Log the basic turn data immediately
+                    supabase_logger.log_keyframe(
+                        session_id=session_id,
+                        timestamp_sec=float(timestamp_sec),
+                        interviewer_question=f"Dynamic Question {question_index}",
+                        associated_transcript=user_text,
+                        ai_response=full_ai_response,
+                        keyframe_reason=f"AI Turn - Q{question_index + 1}"
+                    )
+                    
+                    # Wait slightly for biometric run_metrics_background tasks to finish logging
+                    await asyncio.sleep(2) 
+                    
+                    # Run full report analysis
+                    print(f"[DEBUG] background analysis starting for {session_id}...")
+                    report = await analyzer_engine.generate_report(session_id, persona_prompt or "Standard Technical Interviewer")
                     supabase_logger.save_report(session_id, report)
-                    print(f"\n--- INTERVIEW ANALYSIS REPORT ({session_id}) ---\n{report}\n")
-                except Exception as ex:
-                    print(f"Analysis Error: {ex}")
-            
-            asyncio.create_task(run_analysis())
+                    print(f"[DEBUG] background analysis complete for {session_id}")
+            except Exception as bg_err:
+                logger.error(f"Background Finalization Error: {bg_err}")
+
+        # Fire and forget WITHOUT awaiting in the handler
+        asyncio.create_task(finalize_turn_async())
 
     except Exception as e:
         logger.error(f"Chat Stream Error: {e}")
@@ -567,43 +609,64 @@ async def chat(request):
 async def tts(request):
     data = await request.json()
     text = data.get('text', '')
+    print(f"[DEBUG] /api/tts hit! Length: {len(text)} chars")
     try:
-        from elevenlabs.client import ElevenLabs
-        eleven_client = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
+        gemini = get_gemini_client()
+        audio_prompt = f"Please read the following text aloud naturally and professionally:\n\n{text}"
         
-        # We can use a specific voice ID or name
-        # For now, let's use a default professional voice ID
-        # "pNInz6obpgnuM07pZQX8" is 'Adam' (a high quality professional voice)
-        audio_stream = eleven_client.text_to_speech.convert(
-            text=text,
-            voice_id="pNInz6obpgDQGcFmaJgB", # Adam
-            model_id="eleven_multilingual_v2",
-            output_format="mp3_44100_128"
+        print(f"[DEBUG] Requesting TTS from Gemini...")
+        # We use a 30s timeout to avoid indefinite hangs
+        start_time = asyncio.get_event_loop().time()
+        response = await asyncio.wait_for(
+            gemini.aio.models.generate_content(
+                model="models/gemini-2.5-pro-preview-tts",
+                contents=audio_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                )
+            ),
+            timeout=30.0
         )
+        end_time = asyncio.get_event_loop().time()
+        print(f"[DEBUG] Gemini TTS response received in {end_time - start_time:.2f}s")
         
-        temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.mp3")
-        # Run ElevenLabs TTS in a thread to avoid blocking the event loop
-        def _generate_eleven():
-            audio_stream = eleven_client.text_to_speech.convert(
-                text=text,
-                voice_id="pNInz6obpgDQGcFmaJgB", # Adam
-                model_id="eleven_multilingual_v2",
-                output_format="mp3_44100_128"
-            )
-            with open(temp_audio, "wb") as f:
-                for chunk in audio_stream:
-                    f.write(chunk)
-                    
-        await asyncio.to_thread(_generate_eleven)
+        audio_bytes = None
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'inline_data') and part.inline_data:
+                audio_bytes = part.inline_data.data
+                break
+            elif hasattr(part, 'blob') and part.blob:
+                audio_bytes = part.blob.data
+                break
+                
+        if not audio_bytes:
+            part_types = [type(p).__name__ for p in response.candidates[0].content.parts]
+            logger.error(f"No audio data found in response parts. Types present: {part_types}")
+            raise ValueError("No audio data returned from Gemini")
 
+        print(f"[DEBUG] Audio bytes received (size: {len(audio_bytes)}). Writing to temp file...")
+        temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.wav")
+        import wave
+        with wave.open(temp_audio, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2) # 16-bit
+            wav_file.setframerate(24000) # Gemini outputs 24kHz PCM
+            wav_file.writeframes(audio_bytes)
+
+        print(f"[DEBUG] TTS complete. Serving file: {temp_audio}")
         return web.FileResponse(temp_audio)
     except Exception as e:
+<<<<<<< HEAD
         err_str = str(e)
         if "quota_exceeded" in err_str:
             print(f"[WARNING] ElevenLabs Quota Exceeded. Continuing without TTS.")
         else:
             logger.error(f"ElevenLabs TTS Error: {err_str}")
         return web.Response(text="TTS Error", status=500)
+=======
+        logger.error(f"Gemini TTS Error: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+>>>>>>> a7b5851b5b3ca49f1912684fa65b29a785da755a
 
 async def offer(request):
     try:
