@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@met4citizen/talkinghead"],
   async rewrites() {
     return [
       {
@@ -13,6 +12,7 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     return config;
   },
+  turbopack: {}
 };
 
 export default nextConfig;

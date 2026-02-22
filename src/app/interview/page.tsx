@@ -2,7 +2,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
-import Avatar, { AvatarHandle } from "@/components/Avatar";
+import dynamic from "next/dynamic";
+import { AvatarHandle } from "@/components/Avatar";
+
+const Avatar = dynamic(() => import("@/components/Avatar"), { ssr: false });
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 function CameraIcon({ off }: { off: boolean }) {
@@ -889,8 +892,14 @@ export default function InterviewPage() {
           const msg = JSON.parse(event.data);
           if (msg.type === "video_inference") {
             const conf = Math.round(msg.confidence * 100);
+            const msgGaze = msg.gaze !== undefined ? Math.round(msg.gaze * 100) : 88;
+            const msgFidget = msg.fidget !== undefined ? Math.round(msg.fidget * 100) : 12;
+
             setConfidence(conf);
-            addBiometricPoint({ time: Math.round(msg.timestamp / 1000), gazeScore, confidence: conf, fidgetIndex: fidget, stressSpike: conf < 40 });
+            setGazeScore(msgGaze);
+            setFidget(msgFidget);
+
+            addBiometricPoint({ time: Math.round(msg.timestamp / 1000), gazeScore: msgGaze, confidence: conf, fidgetIndex: msgFidget, stressSpike: conf < 40 });
           }
           if (msg.type === "audio_inference") {
             const audioConf = Math.round(msg.confidence * 100);
@@ -986,8 +995,13 @@ export default function InterviewPage() {
 
   // ── Auto-scroll transcript ────────────────────────────────────────────────
   useEffect(() => {
-    if (transcriptRef.current)
-      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    if (transcriptRef.current) {
+      setTimeout(() => {
+        if (transcriptRef.current) {
+          transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+        }
+      }, 50);
+    }
   }, [transcript]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────────────

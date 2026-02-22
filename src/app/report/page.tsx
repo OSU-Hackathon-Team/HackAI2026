@@ -8,7 +8,8 @@ import {
   ResponsiveContainer, Area, AreaChart,
   PieChart, Pie, Cell,
   BarChart, Bar,
-  CartesianGrid
+  CartesianGrid,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from "recharts";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import { IntelligenceReport } from "@/components/IntelligenceReport";
@@ -187,7 +188,7 @@ function PerformanceTrendChart({ data }: { data: any[] }) {
 }
 
 
-// ─── COMPETENCY BREAKDOWN DONUT ───────────────────────────────────────────────
+// ─── COMPETENCY BREAKDOWN RADAR ───────────────────────────────────────────────
 const DEFAULT_COMPETENCY_DATA = [
   { name: "Technical Depth", value: 100, color: C.teal },
   { name: "Awaiting Data", value: 0, color: C.purple },
@@ -199,26 +200,29 @@ function CompetencyDonut({ competencies }: { competencies: any[] }) {
   return (
     <ChartCard label="COMPETENCY_BREAKDOWN // SKILL MATRIX" delay={200}>
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <ResponsiveContainer width="100%" height={180}>
-          <PieChart>
-            <defs>
-              <filter id="pioglow">
-                <feGaussianBlur stdDeviation="4" result="blur" />
-                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-            </defs>
-            <Pie
-              data={data} cx="50%" cy="50%"
-              innerRadius={52} outerRadius={78}
-              dataKey="value" paddingAngle={3}
-              isAnimationActive={true} animationBegin={200} animationDuration={900} animationEasing="ease-out"
-            >
-              {data.map((entry, i) => (
-                <Cell key={i} fill={entry.color} stroke="rgba(0,0,0,0.3)" strokeWidth={1} />
-              ))}
-            </Pie>
+        <ResponsiveContainer width="100%" height={220}>
+          <RadarChart data={data} cx="50%" cy="50%" outerRadius={70}>
+            <PolarGrid stroke={C.muted} />
+            <PolarAngleAxis
+              dataKey="name"
+              tick={{ fill: C.teal, fontSize: 9, fontFamily: "JetBrains Mono, monospace" }}
+            />
+            <PolarRadiusAxis
+              angle={30}
+              domain={[0, 100]}
+              tick={false}
+              axisLine={false}
+            />
             <Tooltip content={<HudTooltip />} />
-          </PieChart>
+            <Radar
+              name="Skill Matrix"
+              dataKey="value"
+              stroke={C.teal}
+              fill={C.teal}
+              fillOpacity={0.4}
+              isAnimationActive={true}
+            />
+          </RadarChart>
         </ResponsiveContainer>
         {/* Legend */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", width: "100%", marginTop: "0.5rem" }}>

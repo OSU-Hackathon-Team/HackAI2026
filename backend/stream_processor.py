@@ -147,15 +147,22 @@ class VideoStreamProcessor:
         return process_mediapipe_results(face_result, hand_result)
 
     def do_inference(self):
-        if len(self.feature_history) < 10: return 0.5
+        if len(self.feature_history) < 10: return 0.5, 0.8, 0.1
         now_ms = self.feature_history[-1][0]
         start_ms = now_ms - WINDOW_SIZE_MS
         window_data = [f for t, f in self.feature_history if t >= start_ms]
         window_times = [t for t, f in self.feature_history if t >= start_ms]
-        if len(window_data) < 5: return 0.5
+        if len(window_data) < 5: return 0.5, 0.8, 0.1
 
         window_data = np.array(window_data)
         window_times = np.array(window_times)
+        
+        # Calculate real-time Gaze and Fidget
+        face_feats = window_data[:, :52]
+        gaze_score = 1.0 - np.mean(face_feats[:, 13:15]) 
+        hand_feats = window_data[:, 52:]
+        fidget_index = min(1.0, np.std(hand_feats) * 5.0) 
+
         target_ts = np.linspace(window_times[0], window_times[0] + WINDOW_SIZE_MS, SEQUENCE_LENGTH)
 
         try:
@@ -165,9 +172,11 @@ class VideoStreamProcessor:
             with torch.no_grad():
                 logits = self.model(input_tensor)
                 probs = F.softmax(logits, dim=1)
-                return probs[0][1].item() # CONFIDENT score
+                conf = probs[0][1].item() # CONFIDENT score
+            
+            return float(conf), float(gaze_score), float(fidget_index)
         except Exception:
-            return 0.5
+            return 0.5, float(gaze_score), float(fidget_index)
 
     async def _process_stream(self):
         start_time = time.time()
@@ -188,11 +197,13 @@ class VideoStreamProcessor:
                 current_time = time.time()
                 if current_time - last_inference_time > 1.0: # Run every 1s
                     last_inference_time = current_time
-                    conf = await asyncio.to_thread(self.do_inference)
+                    conf, gaze, fidget = await asyncio.to_thread(self.do_inference)
                     
                     self.datachannel_manager.send_json({
                         "type": "video_inference",
                         "confidence": conf,
+                        "gaze": gaze,
+                        "fidget": fidget,
                         "timestamp": timestamp_ms
                     })
 
