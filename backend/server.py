@@ -360,8 +360,10 @@ async def chat(request):
     resume_text = data.get('resume_text', '')
     job_text = data.get('job_text', '')
     interviewer_persona_id = data.get('interviewer_persona', '')
+    pressure_score = data.get('pressure_score', 50)
+    pressure_trend = data.get('pressure_trend', 'stable')  # 'rising' | 'falling' | 'stable'
 
-    # Load persona prompt
+    # Load base persona prompt
     persona_prompt = "You are a professional technical interviewer for AceIt."
     if interviewer_persona_id:
         persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
@@ -369,19 +371,88 @@ async def chat(request):
             with open(persona_path, 'r') as f:
                 persona_prompt = f.read()
 
+    # ── CHESS ENGINE: Adaptive Difficulty Tiers ─────────────────────────────
+    # These tiers are dramatically distinct personas. The AI's core personality,
+    # question strategy, and emotional tone shift based on the candidate's real-time performance.
+    if pressure_score < 20:
+        # ── TIER 0: SUPPORTIVE MENTOR ─────────────────────────────────────────
+        difficulty_mode = (
+            "PERSONA: You are a supportive mentor, not a tough interrogator. "
+            "The candidate is clearly finding this hard. Treat them like a junior who just needs a nudge. "
+            "Ask very broad, open-ended questions. Do not demand specifics. "
+            "If they fumble, actively rephrase or simplify: 'Let me ask it differently...' "
+            "Celebrate small correct points enthusiastically. Never be silent or cold. "
+            "Your goal: build their confidence so they can succeed."
+        )
+    elif pressure_score < 40:
+        # ── TIER 1: FRIENDLY PROFESSIONAL ────────────────────────────────────
+        difficulty_mode = (
+            "PERSONA: You are a friendly, professional interviewer. "
+            "The candidate needs some scaffolding but is recoverable. "
+            "Ask clear questions with one clearly implied right answer. "
+            "Accept partial answers. Give subtle hints if they get stuck: 'Think about what happens at scale...' "
+            "Your tone is patient and collegial. No trick questions. No big follow-ups."
+        )
+    elif pressure_score < 60:
+        # ── TIER 2: STANDARD PROFESSIONAL ────────────────────────────────────
+        difficulty_mode = (
+            "PERSONA: You are a neutral, professional interviewer. "
+            "Ask standard technical questions with clear expectations. "
+            "Follow up once with a specific probing question if the answer is vague. "
+            "No hints, but no aggression. React factually to their answer: validate what's correct, note what's missing. "
+            "Your tone is businesslike. You are assessing competence, not trying to fail them."
+        )
+    elif pressure_score < 75:
+        # ── TIER 3: SKEPTICAL SENIOR ──────────────────────────────────────────
+        difficulty_mode = (
+            "PERSONA: You are a skeptical senior engineer who has seen it all. "
+            "Every answer gets a follow-up: 'But what happens when X fails?', 'Give me a concrete example.', 'Walk me through the trade-offs.' "
+            "You do not accept vague or theoretical answers. You interrupt generalities with 'But specifically, how?' "
+            "Your tone is dry, mildly impatient. You give minimal praise. "
+            "Ask about edge cases, failure modes, and scale. Assume they know the basics — go deeper."
+        )
+    elif pressure_score < 90:
+        # ── TIER 4: ELITE EXAMINER ────────────────────────────────────────────
+        difficulty_mode = (
+            "PERSONA: You are an elite engineering examiner conducting a principal/staff-level interview. "
+            "You question every assumption. After their answer, immediately pivot to the hardest sub-problem. "
+            "Ask about distributed systems, CAP theorem, consistency models, failure scenarios, and production trade-offs. "
+            "Give NO encouragement. If they answer well, simply say 'Okay.' and move to a harder angle. "
+            "If they waffle, cut them off: 'I'll stop you there. How would you actually implement this at scale?' "
+            "Your tone is cold, precise, and relentless. You are searching for their ceiling."
+        )
+    else:
+        # ── TIER 5: MAXIMUM PRESSURE ──────────────────────────────────────────
+        difficulty_mode = (
+            "PERSONA: You are conducting the hardest possible technical interview. "
+            "Treat every answer as a starting point to an even harder question. Do not move on until you find a gap. "
+            "Ask about timing attacks, lock-free algorithms, Byzantine fault tolerance, or system partition behavior. "
+            "Use terse, almost cold reactions: 'Correct. But that approach breaks in the following scenario...' "
+            "Interrupt immediately if they hedge: 'Don't generalize. What specific algorithm and why?' "
+            "You give zero positive reinforcement. The goal: find the exact boundary of their knowledge."
+        )
+
+    # Trend modifier: if score is rising fast, lean harder into the tier
+    trend_modifier = ""
+    if pressure_trend == "rising":
+        trend_modifier = " [TREND: RISING — the candidate is performing well and improving. Increase difficulty within your current persona. Raise the bar now.]"
+    elif pressure_trend == "falling":
+        trend_modifier = " [TREND: FALLING — the candidate is struggling. Ease up slightly. Focus on confidence recovery without drastically changing your persona.]"
+
     system_prompt = (
         f"{persona_prompt}\n\n"
-        "Keep your response concise, encouraging, and under 3 sentences. "
-        "First, react to the candidate's answer in exactly 1 sentence. "
+        f"{difficulty_mode}{trend_modifier}\n\n"
+        "Keep your response under 3 sentences. "
+        "First, react to the candidate's last answer in 1 sentence (do not be generic). "
         f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}..."
     )
-    
+
     if question_index < 5:
-        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then ask a relevant follow-up question."
+        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then ask a relevant follow-up question appropriate for your current difficulty tier."
         is_finished = False
         next_index = question_index + 1
     else:
-        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then thank them and conclude the interview."
+        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then bring the interview to a close."
         is_finished = True
         next_index = question_index
 
