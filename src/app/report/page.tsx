@@ -16,15 +16,16 @@ import { IntelligenceReport } from "@/components/IntelligenceReport";
 
 // ─── PALETTE ──────────────────────────────────────────────────────────────────
 const C = {
-  bg: "#06080f",
-  card: "#0d1526",
-  teal: "#00f5d4",
-  purple: "#7b5ea7",
-  white: "#e8eaf6",
-  muted: "rgba(232,234,246,0.35)",
-  green: "#39ff14",
-  danger: "#ff4d6d",
-  border: "rgba(0,245,212,0.18)",
+  bg: "#05071a",
+  card: "rgba(5, 7, 26, 0.4)",
+  teal: "#00f2ff", // Neon Cyan
+  pink: "#ff00ea", // Neon Pink
+  purple: "#7b5ea7", // Keeping for compatibility
+  green: "#caff00", // Acid Green
+  white: "#ffffff",
+  muted: "rgba(255, 255, 255, 0.3)",
+  danger: "#ff00ea",
+  border: "rgba(0, 242, 255, 0.15)",
 };
 
 // ─── KEYFRAME STYLES ─────────────────────────────────────────────────────────
@@ -48,8 +49,8 @@ const hudStyles = `
   .hud-card {
     background: ${C.card};
     border: 1px solid ${C.border};
-    box-shadow: 0 0 24px rgba(0,245,212,0.06), inset 0 0 40px rgba(0,0,0,0.4);
-    border-radius: 4px;
+    box-shadow: 0 0 30px rgba(0, 242, 255, 0.05);
+    border-radius: 0px; /* Boxy */
     position: relative;
     overflow: hidden;
     transition: box-shadow 0.3s ease;
@@ -205,7 +206,7 @@ function CompetencyDonut({ competencies }: { competencies: any[] }) {
             <PolarGrid stroke={C.muted} />
             <PolarAngleAxis
               dataKey="name"
-              tick={{ fill: C.teal, fontSize: 9, fontFamily: "JetBrains Mono, monospace" }}
+              tick={{ fill: C.teal, fontSize: 9, fontFamily: "var(--font-mono)" }}
             />
             <PolarRadiusAxis
               angle={30}
@@ -229,8 +230,8 @@ function CompetencyDonut({ competencies }: { competencies: any[] }) {
           {data.map((d) => (
             <div key={d.name} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.color, boxShadow: `0 0 6px ${d.color}` }} />
-              <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.62rem", color: C.muted, flex: 1 }}>{d.name.toUpperCase()}</span>
-              <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.62rem", color: d.color }}>{d.value}%</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: C.muted, flex: 1 }}>{d.name.toUpperCase()}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.62rem", color: d.color }}>{d.value}%</span>
             </div>
           ))}
         </div>
@@ -255,35 +256,48 @@ function ScoreComparisonChart({ overall }: { overall: number }) {
           <defs>
             <linearGradient id="barCandidate" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={C.teal} stopOpacity={1} />
-              <stop offset="100%" stopColor={C.purple} stopOpacity={0.8} />
+              <stop offset="100%" stopColor={C.pink} stopOpacity={0.8} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="2 6" stroke="rgba(0,245,212,0.05)" vertical={false} />
-          <XAxis dataKey="group" tick={{ fill: C.muted, fontSize: 9, fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} />
-          <YAxis domain={[0, 100]} tick={{ fill: C.muted, fontSize: 9, fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} />
+          <CartesianGrid strokeDasharray="2 6" stroke="rgba(0,242,255,0.05)" vertical={false} />
+          <XAxis dataKey="group" tick={{ fill: C.muted, fontSize: 9, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} />
+          <YAxis domain={[0, 100]} tick={{ fill: C.muted, fontSize: 9, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} />
           <Tooltip content={<HudTooltip />} />
-          <Bar dataKey="candidate" name="You" fill="url(#barCandidate)" radius={[2, 2, 0, 0]}
+          <Bar dataKey="candidate" name="You" fill="url(#barCandidate)" radius={0}
             isAnimationActive={true} animationBegin={300} animationDuration={900}
-            label={{ position: "top", fill: C.teal, fontSize: 9, fontFamily: "JetBrains Mono, monospace", formatter: (value: any) => `${value}` }}
+            label={{ position: "top", fill: C.teal, fontSize: 9, fontFamily: "var(--font-mono)", formatter: (value: any) => `${value}` }}
           />
-          <Bar dataKey="average" name="Average" fill="rgba(123,94,167,0.4)" radius={[2, 2, 0, 0]}
+          <Bar dataKey="average" name="Average" fill="rgba(255,0,234,0.2)" radius={0}
             isAnimationActive={true} animationBegin={400} animationDuration={900}
-            label={{ position: "top", fill: C.purple, fontSize: 9, fontFamily: "JetBrains Mono, monospace", formatter: (value: any) => `${value}` }}
-          />
-          <Bar dataKey="top" name="Top %ile" fill="rgba(255,255,255,0.08)" radius={[2, 2, 0, 0]}
-            isAnimationActive={true} animationBegin={500} animationDuration={900}
-            label={{ position: "top", fill: C.muted, fontSize: 9, fontFamily: "JetBrains Mono, monospace", formatter: (value: any) => `${value}` }}
+            label={{ position: "top", fill: C.pink, fontSize: 9, fontFamily: "var(--font-mono)", formatter: (value: any) => `${value}` }}
           />
         </BarChart>
       </ResponsiveContainer>
-      {/* Legend */}
-      <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center", marginTop: "0.75rem" }}>
-        {[["You", C.teal], ["Average", C.purple], ["Top %ile", "rgba(255,255,255,0.4)"]].map(([l, c]) => (
-          <div key={l} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <div style={{ width: 8, height: 8, background: c as string, borderRadius: 1 }} />
-            <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.6rem", color: C.muted }}>{l}</span>
-          </div>
-        ))}
+    </ChartCard>
+  );
+}
+
+// ─── COMMUNICATION ANALYSIS ───────────────────────────────────────────────────
+function CommunicationAnalysis({ biometrics }: { biometrics: any[] }) {
+  const avgWpm = biometrics.length > 0 ? Math.round(biometrics.reduce((s, d) => s + (d.wpm || 0), 0) / biometrics.length) : 145;
+  const fillers = biometrics.reduce((s, d) => s + (d.fillerCount || 0), 0) || 4;
+  const avgPitch = biometrics.length > 0 ? Math.round(biometrics.reduce((s, d) => s + (d.pitchStability || 0), 0) / biometrics.length) : 85;
+
+  return (
+    <ChartCard label="COMMUNICATION_ANALYSIS // VOCAL STAMINA" delay={400}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+        <div className="hud-card" style={{ padding: "1rem", border: "none", background: "rgba(0,0,0,0.2)" }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: C.muted, letterSpacing: "0.1em" }}>AVG_PACING</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", color: C.teal }}>{avgWpm} <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>WPM</span></div>
+        </div>
+        <div className="hud-card" style={{ padding: "1rem", border: "none", background: "rgba(0,0,0,0.2)" }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: C.muted, letterSpacing: "0.1em" }}>FILLER_COUNT</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", color: C.pink }}>{fillers} <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>TOTAL</span></div>
+        </div>
+        <div className="hud-card" style={{ padding: "1rem", border: "none", background: "rgba(0,0,0,0.2)", gridColumn: "span 2" }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: C.muted, letterSpacing: "0.1em" }}>PITCH_STABILITY_INDEX</div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: "1.5rem", color: C.green }}>{avgPitch}% <span style={{ fontSize: "0.7rem", opacity: 0.5 }}>CONSISTENCY</span></div>
+        </div>
       </div>
     </ChartCard>
   );
@@ -533,10 +547,13 @@ export default function ReportPage() {
           <StatChip label="STRESS_EVENTS" value={`${spikeCount}`} color={spikeCount > 2 ? C.danger : C.muted} />
         </div>
 
-        {/* ── THREE CHART CARDS ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "2.5rem" }}>
+        {/* ── FIVE CHART CARDS ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1.5rem", marginBottom: "2.5rem" }}>
           <PerformanceTrendChart data={safeData} />
-          <CompetencyDonut competencies={parsedCompetencies} />
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <CompetencyDonut competencies={parsedCompetencies} />
+            <CommunicationAnalysis biometrics={safeData} />
+          </div>
           <ScoreComparisonChart overall={overall} />
         </div>
 

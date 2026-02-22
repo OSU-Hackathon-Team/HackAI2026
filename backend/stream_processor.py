@@ -268,10 +268,31 @@ class AudioStreamProcessor:
             probs = F.softmax(logits, dim=1)
             audio_confidence = probs[0][1].item() # Class 1 is CONFIDENT
 
+            # 4. Audio Metrics (Pitch, WPM, Frequency)
+            import librosa
+            # audio_data is already 16kHz mono
+            y = audio_data.flatten()
+            
+            # WPM
+            duration_sec = len(y) / 16000.0
+            word_count = len(transcript.split())
+            wpm = (word_count / duration_sec) * 60 if duration_sec > 0 else 0
+            
+            # Pitch & Frequency using YIN or Zero Crossing as proxy if needed
+            # For real-time, zero crossing rate is fast
+            zcr = librosa.feature.zero_crossing_rate(y)
+            mean_freq = np.mean(zcr) * 8000 # Rough estimate of mean frequency
+            
+            # Pitch estimation (stdev of ZCR as a proxy for vocal stability)
+            pitch_stability = max(0.0, 1.0 - np.std(zcr) * 10)
+
         return {
             "type": "audio_inference",
             "transcript": transcript,
-            "confidence": audio_confidence
+            "confidence": audio_confidence,
+            "wpm": float(wpm),
+            "pitch_stability": float(pitch_stability),
+            "frequency": float(mean_freq)
         }
 
     async def _process_stream(self):
