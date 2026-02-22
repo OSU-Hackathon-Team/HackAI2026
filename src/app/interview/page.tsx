@@ -1519,36 +1519,59 @@ function InterviewContent() {
 
             {/* ── HUD DASHBOARD ── */}
             <div style={{
-              display: "flex",
-              justifyContent: "space-around",
-              alignItems: "center",
               background: "rgba(8,11,18,0.4)",
               backdropFilter: "blur(12px)",
               borderRadius: "16px",
               border: "1px solid rgba(255,255,255,0.05)",
               padding: "1.5rem",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+              boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1.5rem"
             }}>
-              <HUDMetric
-                label="GAZE_STABILITY"
-                value={gazeScore}
-                color={gazeScore > 70 ? "#00e096" : "#ffcc00"}
-                glowColor={gazeScore > 70 ? "rgba(0,224,150,0.4)" : "rgba(255,204,0,0.3)"}
-              />
-              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
-              <HUDMetric
-                label="NEURAL_CONFIDENCE"
-                value={confidence}
-                color={confidence > 70 ? "#00e5ff" : "#ff8800"}
-                glowColor={confidence > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,136,0,0.3)"}
-              />
-              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
-              <HUDMetric
-                label="KINETIC_FIDGET"
-                value={fidget}
-                color={fidget < 40 ? "#caff00" : "#ff4d6d"}
-                glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
-              />
+              <div style={{
+                display: "flex",
+                justifyContent: "space-around",
+                alignItems: "center",
+              }}>
+                <HUDMetric
+                  label="GAZE_STABILITY"
+                  value={gazeScore}
+                  color={gazeScore > 70 ? "#00e096" : "#ffcc00"}
+                  glowColor={gazeScore > 70 ? "rgba(0,224,150,0.4)" : "rgba(255,204,0,0.3)"}
+                />
+                <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+                <HUDMetric
+                  label="NEURAL_CONFIDENCE"
+                  value={confidence}
+                  color={confidence > 70 ? "#00e5ff" : "#ff8800"}
+                  glowColor={confidence > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,136,0,0.3)"}
+                />
+                <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+                <HUDMetric
+                  label="KINETIC_FIDGET"
+                  value={fidget}
+                  color={fidget < 40 ? "#caff00" : "#ff4d6d"}
+                  glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
+                />
+              </div>
+
+              {/* OVERALL RESPONSE GRADE BAR */}
+              <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "1rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
+                  <span className="label" style={{ fontSize: "0.65rem", letterSpacing: "0.15em", color: "var(--muted)" }}>OVERALL RESPONSE GRADE</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "1rem", color: getColor(pressureScore), textShadow: `0 0 10px ${getColor(pressureScore)}cc` }}>{Math.round(pressureScore)}%</span>
+                </div>
+                <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.08)", borderRadius: "2px", overflow: "hidden" }}>
+                  <div style={{
+                    width: `${pressureScore}%`,
+                    height: "100%",
+                    background: getColor(pressureScore),
+                    boxShadow: `0 0 12px ${getColor(pressureScore)}`,
+                    transition: "width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.5s ease"
+                  }} />
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1594,10 +1617,19 @@ function InterviewContent() {
                 </div>
               </div>
               {/* Compact HUD in Coding Phase */}
-              <div style={{ display: "flex", gap: "0.5rem", background: "rgba(0,0,0,0.2)", padding: "0.5rem", borderRadius: "8px" }}>
-                <HUDMetric label="GAZE" value={gazeScore} color="#00e096" glowColor="rgba(0,224,150,0.2)" />
-                <HUDMetric label="CONF" value={confidence} color="#00e5ff" glowColor="rgba(0,229,255,0.2)" />
-                <HUDMetric label="FIDG" value={fidget} color="#caff00" glowColor="rgba(202,255,0,0.2)" />
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", background: "rgba(0,0,0,0.2)", padding: "0.75rem", borderRadius: "8px" }}>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <HUDMetric label="GAZE" value={gazeScore} color="#00e096" glowColor="rgba(0,224,150,0.2)" />
+                  <HUDMetric label="CONF" value={confidence} color="#00e5ff" glowColor="rgba(0,229,255,0.2)" />
+                  <HUDMetric label="FIDG" value={fidget} color="#caff00" glowColor="rgba(202,255,0,0.2)" />
+                </div>
+                <div style={{ width: "100%", height: "2px", background: "rgba(255,255,255,0.05)", borderRadius: "1px", overflow: "hidden" }}>
+                  <div style={{ width: `${pressureScore}%`, height: "100%", background: getColor(pressureScore), transition: "width 0.5s ease-out" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.5rem", color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
+                  <span>REPONSE_GRADE</span>
+                  <span style={{ color: getColor(pressureScore) }}>{Math.round(pressureScore)}%</span>
+                </div>
               </div>
             </>
           )}
