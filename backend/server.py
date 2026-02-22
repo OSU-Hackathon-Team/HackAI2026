@@ -27,6 +27,8 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
 from supabase_client import supabase_logger
 from openai import OpenAI, AsyncOpenAI
+from google import genai
+from google.genai import types
 from scipy.interpolate import interp1d
 import cv2
 import torch
@@ -53,6 +55,13 @@ try:
         if _async_client is None:
             _async_client = AsyncOpenAI()
         return _async_client
+        
+    _gemini_client = None
+    def get_gemini_client():
+        global _gemini_client
+        if _gemini_client is None:
+            _gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY", ""))
+        return _gemini_client
         
     analyzer_engine = InterviewAnalyzerEngine()
     print("Backend initialization successful (Models, API clients, & Analyzer ready)")
@@ -285,54 +294,58 @@ async def stream_process(request):
         return web.json_response({"error": str(e)}, status=500)
 
 async def init_session(request):
-    reader = await request.multipart()
-    resume_text = ""
-    job_description = ""
-    interviewer_persona_id = ""
-    role = "Software Engineer"
-    company = "AceIt"
-    
-    while True:
-        part = await reader.next()
-        if part is None: break
-        if part.name == 'resume':
-            filename = part.filename
-            content = await part.read()
-            if filename.endswith('.pdf'):
-                resume_text = extract_text_from_pdf(content)
-            else:
-                resume_text = content.decode('utf-8', errors='ignore')
-        elif part.name == 'job_description':
-            job_description = (await part.read()).decode('utf-8')
-        elif part.name == 'interviewer_persona':
-            interviewer_persona_id = (await part.read()).decode('utf-8')
-        elif part.name == 'role':
-            role = (await part.read()).decode('utf-8')
-        elif part.name == 'company':
-            company = (await part.read()).decode('utf-8')
-
-    # Load persona prompt
-    persona_prompt = "You are an expert AI Interviewer."
-    if interviewer_persona_id:
-        persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
-        if os.path.exists(persona_path):
-            with open(persona_path, 'r') as f:
-                persona_prompt = f.read()
-
-    system_prompt = (
-        f"{persona_prompt}\n\n"
-        "Based on the candidate's resume and the job description, "
-        "introduce yourself briefly and ask an introductory question about their background. "
-        "Keep it professional and concise (under 3 sentences)."
-    )
-    user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
-    
     try:
-        completion = await get_async_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        reader = await request.multipart()
+        resume_text = ""
+        job_description = ""
+        interviewer_persona_id = ""
+        role = "Software Engineer"
+        company = "AceIt"
+        
+        while True:
+            part = await reader.next()
+            if part is None: break
+            if part.name == 'resume':
+                filename = getattr(part, 'filename', '') or ''
+                content = await part.read()
+                if filename.endswith('.pdf'):
+                    resume_text = extract_text_from_pdf(content)
+                else:
+                    resume_text = content.decode('utf-8', errors='ignore')
+            elif part.name == 'job_description':
+                job_description = (await part.read()).decode('utf-8')
+            elif part.name == 'interviewer_persona':
+                interviewer_persona_id = (await part.read()).decode('utf-8')
+            elif part.name == 'role':
+                role = (await part.read()).decode('utf-8')
+            elif part.name == 'company':
+                company = (await part.read()).decode('utf-8')
+
+        # Load persona prompt
+        persona_prompt = "You are an expert AI Interviewer."
+        if interviewer_persona_id:
+            persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
+            if os.path.exists(persona_path):
+                with open(persona_path, 'r') as f:
+                    persona_prompt = f.read()
+
+        system_prompt = (
+            f"{persona_prompt}\n\n"
+            "Based on the candidate's resume and the job description, "
+            "introduce yourself briefly and ask an introductory question about their background. "
+            "Keep it professional and concise (under 3 sentences)."
         )
-        first_question = completion.choices[0].message.content
+        user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
+        
+        gemini = get_gemini_client()
+        completion = await gemini.aio.models.generate_content(
+            model="models/gemini-3-flash-preview",
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+            )
+        )
+        first_question = completion.text
         session_id = f"session-{uuid.uuid4().hex[:8]}"
         
         # Save metadata to Supabase
@@ -345,6 +358,8 @@ async def init_session(request):
             "job_text": job_description
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return web.json_response({"error": str(e)}, status=500)
 
 async def chat(request):
@@ -457,16 +472,19 @@ async def chat(request):
 
     full_ai_response = ""
     try:
-        # Use stream=True for token-by-token delivery
-        stream = await get_async_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
-            stream=True
+        # Use stream=True for token-by-token delivery via Gemini
+        gemini = get_gemini_client()
+        stream = await gemini.aio.models.generate_content_stream(
+            model="models/gemini-3-flash-preview",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+            )
         )
 
         async for chunk in stream:
-            if chunk.choices[0].delta.content:
-                content = chunk.choices[0].delta.content
+            if chunk.text:
+                content = chunk.text
                 full_ai_response += content
                 # SSE Format: data: <payload>\n\n
                 await response.write(f"data: {json.dumps({'token': content})}\n\n".encode())
@@ -509,37 +527,47 @@ async def tts(request):
     data = await request.json()
     text = data.get('text', '')
     try:
-        from elevenlabs.client import ElevenLabs
-        eleven_client = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
+        gemini = get_gemini_client()
+        audio_prompt = f"Please read the following text aloud naturally and professionally:\n\n{text}"
         
-        # We can use a specific voice ID or name
-        # For now, let's use a default professional voice ID
-        # "pNInz6obpgnuM07pZQX8" is 'Adam' (a high quality professional voice)
-        audio_stream = eleven_client.text_to_speech.convert(
-            text=text,
-            voice_id="pNInz6obpgDQGcFmaJgB", # Adam
-            model_id="eleven_multilingual_v2",
-            output_format="mp3_44100_128"
+        # We run the synchronous generate_content wrapped in a thread if aio gives issues with AUDIO response modalities
+        # but aio is strictly better if it's fully supported:
+        response = await gemini.aio.models.generate_content(
+            model="models/gemini-2.5-pro-preview-tts",
+            contents=audio_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+            )
         )
         
-        temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.mp3")
-        # Run ElevenLabs TTS in a thread to avoid blocking the event loop
-        def _generate_eleven():
-            audio_stream = eleven_client.text_to_speech.convert(
-                text=text,
-                voice_id="pNInz6obpgDQGcFmaJgB", # Adam
-                model_id="eleven_multilingual_v2",
-                output_format="mp3_44100_128"
-            )
-            with open(temp_audio, "wb") as f:
-                for chunk in audio_stream:
-                    f.write(chunk)
-                    
-        await asyncio.to_thread(_generate_eleven)
+        audio_bytes = None
+        for part in response.candidates[0].content.parts:
+            # First check for inline_data (standard for generate_content with audio output)
+            if hasattr(part, 'inline_data') and part.inline_data:
+                audio_bytes = part.inline_data.data
+                break
+            # Fallback check for raw blob data if part itself is a blob (depends on SDK version)
+            elif hasattr(part, 'blob') and part.blob:
+                audio_bytes = part.blob.data
+                break
+                
+        if not audio_bytes:
+            # Log the parts for debugging
+            part_types = [type(p).__name__ for p in response.candidates[0].content.parts]
+            logger.error(f"No audio data found in response parts. Types present: {part_types}")
+            raise ValueError("No audio data returned from Gemini")
+
+        temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.wav")
+        import wave
+        with wave.open(temp_audio, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2) # 16-bit
+            wav_file.setframerate(24000) # Gemini outputs 24kHz PCM
+            wav_file.writeframes(audio_bytes)
 
         return web.FileResponse(temp_audio)
     except Exception as e:
-        logger.error(f"ElevenLabs TTS Error: {e}")
+        logger.error(f"Gemini TTS Error: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
 async def offer(request):

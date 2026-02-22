@@ -7,7 +7,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Ensure we can import robust Async Client 
-from openai import AsyncOpenAI
+from google import genai
+from google.genai import types
 
 # Setup path to import backend modules securely from the parent level
 backend_dir = Path(__file__).resolve().parent.parent
@@ -29,16 +30,16 @@ class InterviewAnalyzerEngine:
     all keyframes from Supabase, and leveraging an LLM to generate an insightful 
     post-interview coaching report based on the provided analyzer_prompt.
     """
-    def __init__(self, model: str = "gpt-4o"):
+    def __init__(self, model: str = "models/gemini-3-flash-preview"):
         self.model = model
         self.prompt_path = backend_dir / "prompts" / "analyzer_prompt.txt"
         
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            logger.error("OPENAI_API_KEY environment variable is missing.")
-            raise ValueError("OPENAI_API_KEY is required to initialize the Analyzer Engine.")
+            logger.error("GEMINI_API_KEY environment variable is missing.")
+            raise ValueError("GEMINI_API_KEY is required to initialize the Analyzer Engine.")
         
-        self.client = AsyncOpenAI(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
         
         # Ensures that the prompt file actually exists before we start anything
         if not self.prompt_path.exists():
@@ -131,17 +132,17 @@ class InterviewAnalyzerEngine:
             # We enforce high precision analysis. temperature=0.3 helps stay grounded in the data 
             # while providing structured analysis matching the markdown requirements.
             print(f"[INFO] Sending {len(ai_input_message)} characters of session data to {self.model}...")
-            response = await self.client.chat.completions.create(
+            response = await self.client.aio.models.generate_content(
                 model=self.model,
-                messages=[
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": ai_input_message}
-                ],
-                temperature=0.3, 
-                max_tokens=3000, # Providing plenty of runway for a detailed point-by-point breakdown
+                contents=ai_input_message,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.3, 
+                    max_output_tokens=3000, # Providing plenty of runway for a detailed point-by-point breakdown
+                )
             )
             
-            report = response.choices[0].message.content
+            report = response.text
             logger.info("Deep analysis successfully completed.")
             return report
             
