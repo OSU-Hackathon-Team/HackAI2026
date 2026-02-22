@@ -2389,9 +2389,9 @@ function InterviewContent() {
           if (typeof event.data === "string" && event.data.startsWith("pong")) return;
           const msg = JSON.parse(event.data);
           if (msg.type === "video_inference") {
-            const conf = Math.round(msg.confidence * 100);
-            const msgGaze = msg.gaze !== undefined ? Math.round(msg.gaze * 100) : 100;
-            const msgFidget = msg.fidget !== undefined ? Math.round(msg.fidget * 100) : 100;
+            const conf = Math.round((msg.NEURAL_CONFIDENCE ?? msg.confidence ?? 0.5) * 100);
+            const msgGaze = Math.round((msg.GAZE_STABILITY ?? msg.gaze ?? 0.8) * 100);
+            const msgFidget = Math.round((msg.KINETIC_FIDGET ?? msg.fidget ?? 0.1) * 100);
             setConfidence(conf); setGazeScore(msgGaze); setFidget(msgFidget);
             addBiometricPoint({ time: Math.round(msg.timestamp / 1000), gazeScore: msgGaze, confidence: conf, fidgetIndex: msgFidget, stressSpike: conf < 40 });
           }

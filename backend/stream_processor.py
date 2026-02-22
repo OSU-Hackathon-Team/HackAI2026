@@ -201,9 +201,9 @@ class VideoStreamProcessor:
                     
                     self.datachannel_manager.send_json({
                         "type": "video_inference",
-                        "confidence": conf,
-                        "gaze": gaze,
-                        "fidget": fidget,
+                        "NEURAL_CONFIDENCE": conf,
+                        "GAZE_STABILITY": gaze,
+                        "KINETIC_FIDGET": fidget,
                         "timestamp": timestamp_ms
                     })
 

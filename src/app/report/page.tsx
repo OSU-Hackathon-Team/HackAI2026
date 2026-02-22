@@ -668,8 +668,8 @@ export default function ReportPage() {
           <StatTile label="Overall Score" value={safeData.length > 0 ? `${overall}` : "—"} color={scoreColor}
             sub={overall >= 70 ? "Strong performance" : overall >= 50 ? "Needs improvement" : "Below threshold"} />
           <StatTile label="Gaze Stability" value={`${avgGaze}%`} color={C.cyan} />
-          <StatTile label="Vocal Confidence" value={`${avgConf}%`} color={C.violet} />
-          <StatTile label="Composure Index" value={`${avgCalm}%`} color={C.cyan} />
+          <StatTile label="Neural Confidence" value={`${avgConf}%`} color={C.violet} />
+          <StatTile label="Kinetic Fidget" value={`${avgCalm}%`} color={C.cyan} />
           <StatTile label="Stress Events" value={`${spikeCount}`} color={spikeCount > 2 ? C.danger : spikeCount > 0 ? C.warn : C.green}
             sub={spikeCount > 2 ? "High stress detected" : spikeCount > 0 ? "Minor spikes" : "Clean session"} />
         </div>
