@@ -25,6 +25,8 @@ export default function UploadPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [presets, setPresets] = useState<{ id: string; title: string; description: string }[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importedResumeName, setImportedResumeName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -48,17 +50,49 @@ export default function UploadPage() {
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setResumeFile(file);
+    if (file) {
+      setResumeFile(file);
+      setResumeText(""); // Clear imported text if a new file is uploaded
+      setImportedResumeName(null);
+    }
+  };
+
+  const handleImportLatestResume = async () => {
+    if (!clerkUserId) {
+      alert("Please sign in to import your resume.");
+      return;
+    }
+    setIsImporting(true);
+    try {
+      const res = await fetch(`http://127.0.0.1:8080/api/get-latest-resume?user_id=${clerkUserId}`);
+      if (!res.ok) throw new Error("No saved resume found.");
+      const data = await res.json();
+      setResumeText(data.resume_text);
+      setImportedResumeName(data.filename || "Saved Resume");
+      setResumeFile(null); // Clear file if importing text
+    } catch (err: any) {
+      alert(err.message || "Failed to import resume.");
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleSubmit = async () => {
-    if (!resumeFile || !jobText.trim()) return;
+    if (!jobText.trim()) return;
     setIsLoading(true);
     clearSessionData();
 
     try {
       const formData = new FormData();
-      formData.append("resume", resumeFile);
+      if (resumeFile) {
+        formData.append("resume", resumeFile);
+      } else if (useInterviewStore.getState().resumeText) {
+        // Create a blob from the stored resume text
+        const blob = new Blob([useInterviewStore.getState().resumeText || ""], { type: "text/plain" });
+        formData.append("resume", blob, importedResumeName || "resume_imported.txt");
+      } else {
+        throw new Error("No resume provided");
+      }
       formData.append("job_description", jobText);
       if (interviewerPersona) {
         formData.append("interviewer_persona", interviewerPersona);
@@ -96,8 +130,9 @@ export default function UploadPage() {
     }
   };
 
-  const canSubmit = resumeFile && jobText.trim().length > 20;
-  const progress = [!!resumeFile, jobText.trim().length > 20].filter(Boolean).length;
+  const hasResume = !!resumeFile || (!!importedResumeName);
+  const canSubmit = hasResume && jobText.trim().length > 20;
+  const progress = [hasResume, jobText.trim().length > 20].filter(Boolean).length;
 
   return (
     <>
@@ -473,7 +508,31 @@ export default function UploadPage() {
           <div className="form-container">
 
             <div>
-              <span className="field-label">01 — Resume</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                <span className="field-label" style={{ marginBottom: 0 }}>01 — Resume</span>
+                {clerkUserId && (
+                  <button
+                    onClick={handleImportLatestResume}
+                    disabled={isImporting}
+                    style={{
+                      background: "rgba(0, 229, 255, 0.08)",
+                      border: "1px solid rgba(0, 229, 255, 0.2)",
+                      borderRadius: "6px",
+                      color: "#00e5ff",
+                      fontSize: "0.65rem",
+                      fontFamily: "DM Mono, monospace",
+                      padding: "0.3rem 0.6rem",
+                      cursor: "pointer",
+                      transition: "all 0.2s ease",
+                      opacity: isImporting ? 0.5 : 1
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0, 229, 255, 0.15)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0, 229, 255, 0.08)"; }}
+                  >
+                    {isImporting ? "IMPORTING..." : "IMPORT LATEST"}
+                  </button>
+                )}
+              </div>
               <div
                 className={`drop-zone ${isDragging ? "dragging" : ""} ${resumeFile ? "filled" : ""}`}
                 onClick={() => fileInputRef.current?.click()}
@@ -483,17 +542,20 @@ export default function UploadPage() {
               >
                 <input ref={fileInputRef} type="file" accept=".pdf,.txt" onChange={handleFileInput} style={{ display: "none" }} />
                 <div className="drop-icon">
-                  {resumeFile ? (
+                  {(resumeFile || importedResumeName) ? (
                     <span style={{ color: "#00e096", fontSize: "1.1rem", fontWeight: 700 }}>✓</span>
                   ) : (
                     <img src="/file.png" alt="Upload file" style={{ width: "24px", height: "24px", objectFit: "contain", filter: "brightness(0) invert(1) opacity(0.7)" }} />
                   )}
                 </div>
-                {resumeFile ? (
+                {(resumeFile || importedResumeName) ? (
                   <>
-                    <div style={{ fontWeight: 700, color: "#00e096", marginBottom: "0.25rem" }}>{resumeFile.name}</div>
+                    <div style={{ fontWeight: 700, color: "#00e096", marginBottom: "0.25rem" }}>
+                      {resumeFile ? resumeFile.name : importedResumeName}
+                    </div>
                     <div style={{ fontSize: "0.75rem", color: "#5a6a82", fontFamily: "DM Mono, monospace" }}>
-                      {(resumeFile.size / 1024).toFixed(0)} KB · click to replace
+                      {resumeFile ? `${(resumeFile.size / 1024).toFixed(0)} KB · ` : "Imported · "}
+                      click to replace
                     </div>
                   </>
                 ) : (

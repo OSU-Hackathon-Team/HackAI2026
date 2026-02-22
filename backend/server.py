@@ -317,14 +317,15 @@ async def init_session(request):
         role = "Software Engineer"
         company = "AceIt"
         user_id = ""
+        resume_filename = "resume.pdf"
         
         while True:
             part = await reader.next()
             if part is None: break
             if part.name == 'resume':
-                filename = getattr(part, 'filename', '') or ''
+                resume_filename = getattr(part, 'filename', '') or 'resume.pdf'
                 content = await part.read()
-                if filename.endswith('.pdf'):
+                if resume_filename.endswith('.pdf'):
                     resume_text = extract_text_from_pdf(content)
                 else:
                     resume_text = content.decode('utf-8', errors='ignore')
@@ -383,6 +384,11 @@ async def init_session(request):
         # Save metadata to Supabase (Initial)
         supabase_logger.save_session_metadata(session_id, role, company, user_id=user_id)
         
+        # PERSIST RESUME: If we have a user_id, save the extracted resume text for future auto-fill
+        if user_id and resume_text:
+            logger.info(f"[PERSISTENCE] Saving resume for user {user_id}")
+            supabase_logger.save_resume(user_id, resume_text, filename=resume_filename)
+        
         return web.json_response({
             "session_id": session_id,
             "resume_text": resume_text,
@@ -393,6 +399,24 @@ async def init_session(request):
         import traceback
         traceback.print_exc()
         return web.json_response({"error": str(e)}, status=500)
+
+async def get_latest_resume(request):
+    """
+    Fetch the most recently uploaded resume for a given user.
+    """
+    user_id = request.query.get("user_id")
+    if not user_id:
+        return web.json_response({"error": "user_id is required"}, status=400)
+    
+    resume = supabase_logger.get_latest_resume(user_id)
+    if not resume:
+        return web.json_response({"error": "No resume found for this user"}, status=404)
+        
+    return web.json_response({
+        "resume_text": resume.get("resume_text"),
+        "filename": resume.get("filename"),
+        "created_at": resume.get("created_at")
+    })
 
 async def chat(request):
     try:
@@ -1035,6 +1059,7 @@ if __name__ == "__main__":
 
         # Prefix all routes with /api/ to handle proxy
         app.router.add_post("/api/init-session", init_session)
+        app.router.add_get("/api/get-latest-resume", get_latest_resume)
         res_offer = app.router.add_post("/api/offer", offer)
         res_health = app.router.add_get("/api/health", lambda request: web.Response(text="OK"))
         res_heartbeat = app.router.add_get("/api/heartbeat", heartbeat)
