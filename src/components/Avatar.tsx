@@ -18,7 +18,7 @@ export interface AvatarHandle {
 }
 
 const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
-    modelUrl = "/models/beard_man.glb",
+    modelUrl = "/models/business_girl.glb",
     onAudioEnd,
     onAudioStart,
     cameraZoom = 0
@@ -75,15 +75,28 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
 
         headRef.current = head;
 
-        const loadAvatar = async () => {
-            try {
-                // Pre-warm the AudioContext
-                if (head.audioCtx && head.audioCtx.state === 'suspended') {
-                    await head.audioCtx.resume();
+        const attemptLoad = async (): Promise<boolean> => {
+            if (!isMounted) return true;
+
+            // Attempt to resume audio context if we have user activation, 
+            // but do NOT block model loading if it fails.
+            if (head.audioCtx && head.audioCtx.state === 'suspended') {
+                const hasActivation = (navigator as any)?.userActivation?.hasBeenActive;
+                if (hasActivation) {
+                    try {
+                        await head.audioCtx.resume();
+                    } catch (e) {
+                        // Still waiting for gesture
+                    }
                 }
+            }
+
+            // Proceed to load the visual model regardless of audio state
+            try {
+                if (isLoaded) return true;
 
                 await new Promise(resolve => setTimeout(resolve, 50));
-                if (!isMounted) return;
+                if (!isMounted) return true;
 
                 await head.showAvatar({
                     url: modelUrl,
@@ -95,14 +108,107 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
                 if (isMounted) {
                     setIsLoaded(true);
                     console.log("[Avatar] Model loaded successfully:", modelUrl);
+
+                    // Dynamically center the camera based on the avatar's actual head bone position
+                    if (head.objectHead && head.avatarHeight) {
+                        try {
+                            const headPos = new THREE.Vector3();
+                            head.objectHead.getWorldPosition(headPos);
+
+                            // Define target Y slightly above the head bone to include hair (approx +10cm)
+                            const targetY = headPos.y + 0.1;
+
+                            // Implement true zoom by altering the Field of View
+                            const baseFov = 30; // TalkingHead default
+                            const targetFov = Math.max(5, baseFov - (cameraZoom * 15));
+                            head.camera.fov = targetFov;
+                            head.camera.updateProjectionMatrix();
+
+                            // Maintain camera at its default fixed distance (z=2 for head)
+                            const z = 2;
+                            const fovRad = targetFov * (Math.PI / 180);
+                            const yOffset = targetY - (4 * head.avatarHeight / 5);
+                            const dynamicCameraY = 1 - (yOffset / (z * Math.tan(fovRad / 2)));
+
+                            console.log("[Avatar] Framing dynamic cameraY:", dynamicCameraY, "for targetY:", targetY, "FOV:", targetFov);
+                            head.setView('head', {
+                                cameraY: dynamicCameraY,
+                                cameraDistance: 0 // Reset camera offsets, let FOV handle zoom
+                            });
+                        } catch (e) {
+                            console.warn("[Avatar] Auto-framing camera failed", e);
+                        }
+                    }
+
                     console.log("[Avatar] Available visemes:", Object.keys(head.mtAvatar || {}).filter(k => k.startsWith('viseme_')));
                 }
+                return true;
             } catch (err) {
                 console.error("[Avatar] Failed to load model:", err);
+                return false;
             }
         };
 
-        loadAvatar();
+        const initAvatar = async () => {
+            // 1. Trigger initial load (Visuals + Audio attempt)
+            const success = await attemptLoad();
+
+            // 2. Background task to ensure AudioContext is eventually resumed
+            const audioInterval = setInterval(async () => {
+                if (!isMounted) {
+                    clearInterval(audioInterval);
+                    return;
+                }
+                if (head.audioCtx && head.audioCtx.state === 'running') {
+                    clearInterval(audioInterval);
+                    return;
+                }
+
+                // Only attempt resume if browser indicates a gesture has occurred
+                if ((navigator as any)?.userActivation?.hasBeenActive) {
+                    try {
+                        await head.audioCtx.resume();
+                        if (head.audioCtx.state === 'running') {
+                            console.log("[Avatar] AudioContext resumed in background.");
+                            clearInterval(audioInterval);
+                        }
+                    } catch (e) {
+                        // Still blocked
+                    }
+                }
+            }, 1000);
+
+            // 3. One-time gesture listeners for immediate resumption
+            const onGesture = async () => {
+                if (head.audioCtx && head.audioCtx.state === 'suspended') {
+                    try {
+                        await head.audioCtx.resume();
+                        console.log("[Avatar] AudioContext resumed via user gesture.");
+                    } catch (e) { }
+                }
+                window.removeEventListener('click', onGesture);
+                window.removeEventListener('keydown', onGesture);
+                window.removeEventListener('touchstart', onGesture);
+            };
+            window.addEventListener('click', onGesture);
+            window.addEventListener('keydown', onGesture);
+            window.addEventListener('touchstart', onGesture);
+
+            // 4. If loading failed (e.g. model URL error), retry visuals periodically
+            if (!success) {
+                const retryInterval = setInterval(async () => {
+                    if (!isMounted) {
+                        clearInterval(retryInterval);
+                        return;
+                    }
+                    if (await attemptLoad()) {
+                        clearInterval(retryInterval);
+                    }
+                }, 3000);
+            }
+        };
+
+        initAvatar();
 
         return () => {
             isMounted = false;
@@ -119,6 +225,36 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
             }
         };
     }, [modelUrl]);
+
+    // React to cameraZoom changes dynamically (fixes Next.js hot-reloading)
+    useEffect(() => {
+        if (!isLoaded || !headRef.current) return;
+        const head = headRef.current;
+        if (head.objectHead && head.avatarHeight) {
+            try {
+                // Implement true zoom by altering the Field of View
+                const baseFov = 30; // TalkingHead default
+                const targetFov = Math.max(5, baseFov - (cameraZoom * 15));
+                head.camera.fov = targetFov;
+                head.camera.updateProjectionMatrix();
+
+                const headPos = new THREE.Vector3();
+                head.objectHead.getWorldPosition(headPos);
+                const targetY = headPos.y + 0.1;
+                const z = 2;
+                const fovRad = targetFov * (Math.PI / 180);
+                const yOffset = targetY - (4 * head.avatarHeight / 5);
+                const dynamicCameraY = 1 - (yOffset / (z * Math.tan(fovRad / 2)));
+
+                head.setView('head', {
+                    cameraY: dynamicCameraY,
+                    cameraDistance: 0
+                });
+            } catch (e) {
+                console.warn("[Avatar] Dynamic zoom re-frame failed", e);
+            }
+        }
+    }, [cameraZoom, isLoaded]);
 
     useImperativeHandle(ref, () => ({
         speak: async (audioUrl: string, text: string) => {

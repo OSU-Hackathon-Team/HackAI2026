@@ -13,7 +13,7 @@ trap cleanup SIGINT
 # Setup Python Virtual Environment
 if [ ! -d ".venv" ]; then
     echo "Creating virtual environment..."
-    python3 -m venv .venv
+    python3 -m venv --system-site-packages .venv
 fi
 
 echo "Activating virtual environment and installing dependencies..."

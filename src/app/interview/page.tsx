@@ -205,7 +205,7 @@ function AvatarPanel({
           ref={avatarRef}
           onAudioStart={onAudioStart}
           onAudioEnd={onAudioEnd}
-          cameraZoom={1.25} // Developer: Adjust this value to zoom in/out (positive values zoom in)
+          cameraZoom={1} // Developer: Adjust this value to zoom in/out (positive values zoom in)
         />
       </div>
 
