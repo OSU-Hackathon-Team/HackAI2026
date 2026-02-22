@@ -26,12 +26,32 @@ class SupabaseLogger:
                 logger.error(f"Failed to initialize Supabase client: {e}")
                 self.supabase = None
 
+    def ensure_session_exists(self, session_id: str, role: str = "Software Engineer", company: str = "AceIt"):
+        """
+        Ensures a session row exists in interview_sessions.
+        """
+        if not self.supabase:
+            return
+        try:
+            # Use upsert to create or ignore
+            print(f"[DEBUG] Ensuring session exists: {session_id}")
+            self.supabase.table("interview_sessions").upsert({
+                "id": session_id,
+                "role": role,
+                "company": company
+            }, on_conflict="id").execute()
+        except Exception as e:
+            logger.warning(f"Could not ensure session existence for {session_id}: {e}")
+
     def log_keyframe(self, session_id: str, timestamp_sec: float, **kwargs):
         """
         Asynchronously log keyframes to Supabase. Returns the logged data (including ID).
         """
         if not self.supabase:
             return None
+
+        # Ensure parent session exists to avoid foreign key errors
+        self.ensure_session_exists(session_id)
 
         try:
             # Check if a keyframe for this exact session_id and timestamp_sec exists

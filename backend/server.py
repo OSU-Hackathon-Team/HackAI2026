@@ -428,7 +428,17 @@ async def chat(request):
         f"{difficulty_mode}{trend_modifier}\n\n"
         "Keep your response under 3 sentences. "
         "First, react to the candidate's last answer in 1 sentence (do not be generic). "
-        f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}..."
+        f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}...\n\n"
+        "CRITICAL FINAL INSTRUCTION: You MUST evaluate the candidate's last answer and assign a quality score A (0.0 to 1.0).\n"
+        "Scoring Rubric (BE FAIR BUT DESCRIPTIVE):\n"
+        "- 0.0-0.1: Says 'no', one-word/vague answer, deflects, or low effort.\n"
+        "- 0.2-0.3: Basic but incomplete or factually weak answer.\n"
+        "- 0.4-0.6: Solid, standard technical answer covering the basics.\n"
+        "- 0.7-0.8: Strong technical answer with specific architectural details or examples.\n"
+        "- 0.9-1.0: Mastery. Exceptional depth, trade-offs, and scalability considerations.\n"
+        "\n"
+        "At the VERY END of your response, you MUST output a score tag in this EXACT format: [SCORE: 0.95] (using your calculated value between 0.0 and 1.0). "
+        "DO NOT SKIP THIS TAG."
     )
     # 260 seconds = ~4 mins 20 secs, leaving time for the final AI speech to hit exactly 5 mins
     if float(timestamp_sec) < 260.0:
@@ -471,8 +481,57 @@ async def chat(request):
                 # SSE Format: data: <payload>\n\n
                 await response.write(f"data: {json.dumps({'token': content})}\n\n".encode())
 
-        # Send metadata at the end
-        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
+        # Extract the score from the full response
+        quality_score = 0.5 # Default
+        import re
+        # Case insensitive match for [SCORE: X.X]
+        match = re.search(r"\[SCORE:\s*(\d+\.?\d*)\]", full_ai_response, re.IGNORECASE)
+        if match:
+            try:
+                quality_score = float(match.group(1))
+                print(f"[DEBUG] Extracted quality_score: {quality_score}")
+                # Clean up the display text by removing the score tag (case insensitive)
+                full_ai_response = re.sub(r"\[SCORE:\s*\d+\.?\d*\]", "", full_ai_response, flags=re.IGNORECASE).strip()
+            except Exception as e:
+                print(f"[DEBUG] Failed to parse quality_score from match: {match.group(1)} - {e}")
+                pass
+        else:
+            # Try a looser match if the bracket format fails
+            alt_match = re.search(r"SCORE:\s*(\d+\.?\d*)", full_ai_response, re.IGNORECASE)
+            if alt_match:
+                try:
+                    quality_score = float(alt_match.group(1))
+                    print(f"[DEBUG] Extracted fallback quality_score: {quality_score}")
+                    full_ai_response = re.sub(r"SCORE:\s*\d+\.?\d*", "", full_ai_response, flags=re.IGNORECASE).strip()
+                except:
+                    pass
+            else:
+                # Check if it outputted the literal placeholder from my mistake
+                if "SCORE: X.X" in full_ai_response:
+                    print(f"[ERROR] LLM outputted terminal 'X.X' literally. Check prompt instructions.")
+                
+                # Progressive fallbacks:
+                # 1. Any bracketed number anywhere: [0.2]
+                res = re.search(r"\[(\d+\.?\d*)]", full_ai_response)
+                if not res:
+                    # 2. "Score: X" anywhere
+                    res = re.search(r"score:\s*(\d+\.?\d*)", full_ai_response, re.IGNORECASE)
+                if not res:
+                    # 3. Any decimal number at the very end
+                    res = re.search(r"(\d\.\d+)\s*$", full_ai_response)
+                
+                if res:
+                    try:
+                        quality_score = float(res.group(1))
+                        print(f"[DEBUG] Robust extraction recovered: {quality_score}")
+                    except: pass
+
+                if quality_score == 0.5:
+                    tail = full_ai_response[-100:].replace('\n', ' ')
+                    print(f"[DEBUG] Extraction failed. Raw tail: ...{tail}")
+
+        # Send metadata at the end including the quality score A
+        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
 
         # Log to Supabase and trigger analysis in the background after stream
         if session_id:
@@ -539,8 +598,12 @@ async def tts(request):
 
         return web.FileResponse(temp_audio)
     except Exception as e:
-        logger.error(f"ElevenLabs TTS Error: {e}")
-        return web.json_response({"error": str(e)}, status=500)
+        err_str = str(e)
+        if "quota_exceeded" in err_str:
+            print(f"[WARNING] ElevenLabs Quota Exceeded. Continuing without TTS.")
+        else:
+            logger.error(f"ElevenLabs TTS Error: {err_str}")
+        return web.Response(text="TTS Error", status=500)
 
 async def offer(request):
     try:
