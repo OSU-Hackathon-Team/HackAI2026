@@ -76,6 +76,7 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
                 }
 
                 await new Promise(resolve => setTimeout(resolve, 50));
+                if (!isMounted) return;
 
                 await head.showAvatar({
                     url: modelUrl,

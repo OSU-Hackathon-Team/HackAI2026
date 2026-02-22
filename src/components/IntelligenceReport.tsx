@@ -149,7 +149,7 @@ export function IntelligenceReport({ content }: IntelligenceReportProps) {
                                             const activeColor = colors[text] || "var(--accent)";
 
                                             return (
-                                                <div style={{
+                                                <span style={{
                                                     fontFamily: "var(--font-mono)",
                                                     fontSize: "0.65rem",
                                                     fontWeight: 800,
@@ -163,7 +163,7 @@ export function IntelligenceReport({ content }: IntelligenceReportProps) {
                                                     opacity: text === "TIMESTAMP:" ? 1 : 0.4
                                                 }}>
                                                     {text.replace(':', '')} {text === "TIMESTAMP:" && <span style={{ width: "20px", height: "1px", background: "var(--accent)" }} />}
-                                                </div>
+                                                </span>
                                             );
                                         }
                                         return <strong style={{ color: "#fff", fontWeight: 700 }} {...props} />;
@@ -173,15 +173,16 @@ export function IntelligenceReport({ content }: IntelligenceReportProps) {
                                         // Match simple time strings like 00:01
                                         if (/^\d{2}:\d{2}$/.test(text.trim())) {
                                             return (
-                                                <div style={{
+                                                <span style={{
                                                     fontFamily: "var(--font-display)",
                                                     fontSize: "4.5rem",
                                                     color: "#fff",
                                                     margin: "0.5rem 0 2rem",
-                                                    lineHeight: 1
+                                                    lineHeight: 1,
+                                                    display: "block"
                                                 }}>
                                                     {text}
-                                                </div>
+                                                </span>
                                             );
                                         }
                                         return (
