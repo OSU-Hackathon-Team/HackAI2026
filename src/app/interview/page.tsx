@@ -513,8 +513,9 @@ class AudioQueue {
   stop() {
     this.queue = [];
     this.isPlaying = false;
-    // TalkingHead doesn't have a simple stop yet in our wrapper, 
-    // but clearing the queue prevents next plays.
+    if (this.avatarRef.current) {
+      this.avatarRef.current.stop();
+    }
   }
 }
 
@@ -529,7 +530,7 @@ export default function InterviewPage() {
     startInterview,
     sessionId, resumeText, jobText, interviewerPersona, interviewerModel, interviewerVoice,
     pressureScore, updatePressureScore, pressureTrend, updateEloScore,
-    userId, role, company, biometrics, interviewers
+    userId, role, company, biometrics, interviewers, addSkippedQuestion, skippedQuestions, interviewStartTime
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -567,7 +568,7 @@ export default function InterviewPage() {
 
   // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
   // ─── PIPELINE: Handle Chat Stream ──────────────────────────────────────────
-  const handleChatStream = async (inputText: string) => {
+  const handleChatStream = async (inputText: string, ignoreScore: boolean = false) => {
     if (!sessionId) return;
 
     try {
@@ -666,7 +667,7 @@ export default function InterviewPage() {
               setQuestionIndex(data.next_index);
 
               // Trigger ELO update with the score A returned by the LLM
-              if (data.quality_score !== undefined) {
+              if (data.quality_score !== undefined && !ignoreScore) {
                 console.log(`[ELO_DEBUG] Received quality_score: ${data.quality_score}`);
                 updateEloScore(data.quality_score);
               }
@@ -1153,6 +1154,54 @@ export default function InterviewPage() {
     }, 2000);
   };
 
+  const handleSkipQuestion = () => {
+    // 1. Find the last question asked by the interviewer
+    const lastQuestion = [...transcript].reverse().find(e => e.speaker === 'interviewer');
+    if (lastQuestion && sessionId) {
+      addSkippedQuestion(lastQuestion.text);
+      console.log(`[DEBUG] Skipped question: "${lastQuestion.text}"`);
+
+      // Persist skip to backend so AI can analyze it in the report
+      fetch("http://127.0.0.1:8080/api/log-skip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          question: lastQuestion.text,
+          timestamp_sec: (Date.now() - (interviewStartTime || Date.now())) / 1000
+        }),
+      }).catch(err => console.error("[DEBUG] Failed to log skip to backend:", err));
+    }
+
+    // 2. Stop any active recording/TTS without triggering processTurn
+    if (isRecording) {
+      if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
+        audioRecorderRef.current.onstop = null;
+        audioRecorderRef.current.stop();
+      }
+      if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+        videoRecorderRef.current.onstop = null;
+        videoRecorderRef.current.stop();
+      }
+      audioRecorderRef.current = null;
+      videoRecorderRef.current = null;
+      audioChunksRef.current = [];
+      videoChunksRef.current = [];
+      setIsRecording(false);
+    }
+    if (audioQueueRef.current) {
+      audioQueueRef.current.stop();
+    }
+
+    // 3. Trigger a new question from the AI directly
+    const systemPrompt = "[SYSTEM: The user has skipped this question. Please pivot and ask a different, relevant interview question instead.]";
+    handleChatStream(systemPrompt, true);
+
+    // Add a local notification
+    setLiveAlert("Question Skipped. AI is pivoting...");
+    setTimeout(() => setLiveAlert(null), 3000);
+  };
+
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60).toString().padStart(2, "0");
     const sec = (s % 60).toString().padStart(2, "0");
@@ -1187,9 +1236,30 @@ export default function InterviewPage() {
         <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 500, letterSpacing: "0.05em", color: isReady ? "var(--text)" : "var(--muted)", transition: "color 0.3s ease" }}>
           {isReady ? formatTime(elapsedSeconds) : "--:--"}
         </div>
-        <button className="btn-danger" onClick={handleFinish} style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
-          End Interview
-        </button>
+        <div style={{ display: "flex", gap: "0.75rem" }}>
+          {isReady && (
+            <button
+              onClick={handleSkipQuestion}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
+                padding: "0.5rem 1.25rem",
+                fontSize: "0.8rem",
+                borderRadius: "4px",
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            >
+              Skip Question
+            </button>
+          )}
+          <button className="btn-danger" onClick={handleFinish} style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
+            End Interview
+          </button>
+        </div>
       </header>
 
       {/* ── MAIN CONTENT ── */}
@@ -1267,13 +1337,6 @@ export default function InterviewPage() {
               value={fidget}
               color={fidget < 40 ? "#caff00" : "#ff4d6d"}
               glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
-            />
-            <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
-            <HUDMetric
-              label="PRESSURE_ELO"
-              value={pressureScore}
-              color={getColor(pressureScore)}
-              glowColor={getColor(pressureScore) + "55"} // Dynamic glow matching pressure
             />
           </div>
         </div>

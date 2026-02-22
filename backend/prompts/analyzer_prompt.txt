@@ -6,8 +6,8 @@ You will receive raw JSON data containing the keyframes of a candidate's mock in
 2. An array of **Interview Keyframes**. Each keyframe represents a specific moment in the interview and may contain:
    - `timestamp_sec`: The exact time in the interview.
    - `associated_transcript`: What the candidate was saying at that moment.
-   - `keyframe_reason`: Why this moment was flagged.
-   - `severity`: How critical this moment was ('critical', 'warning', 'positive', 'neutral').
+   - `keyframe_reason`: Why this moment was flagged (e.g., 'AI Turn', 'Background Analysis', 'User Skip').
+   - `severity`: How critical this moment was ('critical', 'warning', 'positive', 'neutral'). Note: `User Skip` is always 'neutral' and should not penalize the candidate.
    - Visual/Audio metrics like `gaze_score`, `fidget_index`, `pitch_stdev`, `volume_rms`, `pacing_wpm`, `is_visually_confident`, `is_audibly_confident`, and `overall_confidence_score`. Many of these auxiliary fields may be null.
 
 PROCESS:

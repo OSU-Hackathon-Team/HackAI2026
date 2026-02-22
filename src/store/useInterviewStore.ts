@@ -47,7 +47,7 @@ interface InterviewStore {
   heuristicScore: number;          // Grounded heuristic signal (0..1)
   userId: string | null;           // Clerk user id
   interviewers: Interviewer[];
-
+  skippedQuestions: string[];      // List of questions user skipped
 
   setPhase: (phase: InterviewPhase) => void;
   setSessionId: (id: string | null) => void;
@@ -68,6 +68,7 @@ interface InterviewStore {
   setTranscript: (transcript: TranscriptEntry[]) => void;
   setRole: (role: string) => void;
   setCompany: (company: string) => void;
+  addSkippedQuestion: (question: string) => void;
   updateEloScore: (qualityA: number) => void;
   updatePressureScore: (rawScore: number) => void;
   setInterviewers: (interviewers: Interviewer[]) => void;
@@ -103,7 +104,7 @@ export const useInterviewStore = create<InterviewStore>()(
       heuristicScore: 0.5,
       userId: null,
       interviewers: [],
-
+      skippedQuestions: [],
 
       setPhase: (phase) => set({ phase }),
       setSessionId: (id) => set({ sessionId: id }),
@@ -148,6 +149,7 @@ export const useInterviewStore = create<InterviewStore>()(
       setRole: (role) => set({ role }),
       setCompany: (company) => set({ company }),
       setInterviewers: (interviewers) => set({ interviewers }),
+      addSkippedQuestion: (q) => set((state) => ({ skippedQuestions: [...state.skippedQuestions, q] })),
       updatePressureScore: (rawScore) => set({ heuristicScore: (rawScore + 1) / 2 }),
 
       updateEloScore: (qualityA) => set((state) => {
@@ -210,6 +212,7 @@ export const useInterviewStore = create<InterviewStore>()(
           pressureScore: 50,
           performanceHistory: [],
           pressureTrend: "stable",
+          skippedQuestions: [],
         }),
       reset: () =>
         set({
@@ -234,6 +237,7 @@ export const useInterviewStore = create<InterviewStore>()(
           eloDeltas: [],
           performanceHistory: [],
           pressureTrend: "stable",
+          skippedQuestions: [],
         }),
     }),
     {

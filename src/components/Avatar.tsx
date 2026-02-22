@@ -15,6 +15,7 @@ interface AvatarProps {
 
 export interface AvatarHandle {
     speak: (audioUrl: string, text: string) => Promise<void>;
+    stop: () => void;
 }
 
 const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
@@ -307,6 +308,12 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
             } catch (err) {
                 console.error("[Avatar] Speech failed:", err);
                 if (onAudioEnd) onAudioEnd();
+            }
+        },
+        stop: () => {
+            const head = headRef.current;
+            if (head) {
+                head.stop();
             }
         }
     }));

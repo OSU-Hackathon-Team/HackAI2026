@@ -337,7 +337,7 @@ function TranscriptRow({ entry, isStress, onJump }: { entry: any; isStress: bool
 export default function ReportPage() {
   const router = useRouter();
   const {
-    biometrics = [], transcript = [], sessionId,
+    biometrics = [], transcript = [], sessionId, skippedQuestions = [],
     aiCoachingReport, setAiCoachingReport, setBiometrics, setTranscript, reset
   } = useInterviewStore();
 
@@ -539,6 +539,24 @@ export default function ReportPage() {
           <CompetencyDonut competencies={parsedCompetencies} />
           <ScoreComparisonChart overall={overall} />
         </div>
+
+        {/* ── SKIPPED QUESTIONS ── */}
+        {skippedQuestions.length > 0 && (
+          <div className="hud-card" style={{ padding: "1.5rem", marginBottom: "2.5rem", animation: "fadeUp 0.6s 350ms ease both" }}>
+            <ExtraCorners />
+            <div style={{ fontFamily: "Orbitron, sans-serif", fontSize: "0.55rem", letterSpacing: "0.25em", color: "#ff8800", marginBottom: "1rem", opacity: 0.8 }}>
+              SESSION_METRICS // SKIPPED_QUESTIONS_DETECTED
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {skippedQuestions.map((q, i) => (
+                <div key={i} style={{ display: "flex", gap: "1rem", alignItems: "flex-start", opacity: 0.8 }}>
+                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.6rem", color: "#ff8800", marginTop: "0.2rem" }}>[{i + 1}]</div>
+                  <div style={{ fontFamily: "Rajdhani, sans-serif", fontSize: "0.9rem", color: C.muted }}>{q}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── AI COACHING REPORT ── */}
         <section style={{ marginBottom: "2.5rem", animation: "fadeUp 0.6s 400ms ease both" }}>

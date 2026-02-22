@@ -762,6 +762,29 @@ async def get_report_handler(request):
     
     return web.json_response(report_data)
 
+async def log_skip_handler(request):
+    try:
+        data = await request.json()
+        session_id = data.get('session_id')
+        question = data.get('question', 'Unknown Question')
+        timestamp_sec = data.get('timestamp_sec', 0.0)
+        
+        if not session_id:
+            return web.json_response({"error": "No session_id provided"}, status=400)
+            
+        supabase_logger.log_keyframe(
+            session_id=session_id,
+            timestamp_sec=float(timestamp_sec),
+            interviewer_question=question,
+            keyframe_reason="User Skip",
+            associated_transcript="[USER SKIPPED QUESTION]"
+        )
+        print(f"[DEBUG] Skip event logged for session={session_id}: {question}")
+        return web.json_response({"status": "success"})
+    except Exception as e:
+        logger.error(f"Log skip error: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
 async def get_session_data_handler(request):
     session_id = request.match_info.get('session_id')
     if not session_id:
@@ -919,8 +942,7 @@ if __name__ == "__main__":
         app.router.add_get("/api/get-sessions", get_sessions_handler)
         app.router.add_get("/api/jobs", get_jobs_handler)
         app.router.add_get("/api/interviewers", get_interviewers_handler)
-
-
+        app.router.add_post("/api/log-skip", log_skip_handler)
 
         # Add CORS to all routes
         for route in list(app.router.routes()):
