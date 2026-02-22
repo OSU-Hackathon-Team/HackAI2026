@@ -509,14 +509,37 @@ async def tts(request):
     data = await request.json()
     text = data.get('text', '')
     try:
+        from elevenlabs.client import ElevenLabs
+        eleven_client = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
+        
+        # We can use a specific voice ID or name
+        # For now, let's use a default professional voice ID
+        # "pNInz6obpgnuM07pZQX8" is 'Adam' (a high quality professional voice)
+        audio_stream = eleven_client.text_to_speech.convert(
+            text=text,
+            voice_id="pNInz6obpgDQGcFmaJgB", # Adam
+            model_id="eleven_multilingual_v2",
+            output_format="mp3_44100_128"
+        )
+        
         temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.mp3")
-        # Run synchronous TTS via to_thread to avoid event loop blocking
-        def _sync_tts():
-            with sync_client.audio.speech.with_streaming_response.create(model="tts-1", voice="nova", input=text) as response:
-                response.stream_to_file(temp_audio)
-        await asyncio.to_thread(_sync_tts)
+        # Run ElevenLabs TTS in a thread to avoid blocking the event loop
+        def _generate_eleven():
+            audio_stream = eleven_client.text_to_speech.convert(
+                text=text,
+                voice_id="pNInz6obpgDQGcFmaJgB", # Adam
+                model_id="eleven_multilingual_v2",
+                output_format="mp3_44100_128"
+            )
+            with open(temp_audio, "wb") as f:
+                for chunk in audio_stream:
+                    f.write(chunk)
+                    
+        await asyncio.to_thread(_generate_eleven)
+
         return web.FileResponse(temp_audio)
     except Exception as e:
+        logger.error(f"ElevenLabs TTS Error: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
 async def offer(request):

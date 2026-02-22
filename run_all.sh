@@ -31,7 +31,7 @@ python3 backend/server.py &
 BACKEND_PID=$!
 
 echo "Starting frontend dev server..."
-npm run dev &
+npm run dev -- --webpack &
 FRONTEND_PID=$!
 
 # Wait for background processes to finish
