@@ -446,32 +446,57 @@ function ConnectionBadge({ status }: { status: "connecting" | "connected" | "fai
 
 // ─── AUDIO QUEUE HELPER ──────────────────────────────────────────────────────
 class AudioQueue {
-  private queue: { url: string; text: string }[] = [];
+  private queue: { text: string }[] = [];
   public isPlaying = false;
   private onEnd: () => void;
   private avatarRef: React.RefObject<AvatarHandle | null>;
+  private isStreamStarted = false;
+  private turnEnded = false;
+  private expectedEndTime = 0;
 
   constructor(onEnd: () => void, avatarRef: React.RefObject<AvatarHandle | null>) {
     this.onEnd = onEnd;
     this.avatarRef = avatarRef;
   }
 
-  add(url: string, text: string) {
-    this.queue.push({ url, text });
+  add(text: string) {
+    this.queue.push({ text });
     if (!this.isPlaying) this.playNext();
+  }
+
+  signalEndTurn() {
+    this.turnEnded = true;
+    if (!this.isPlaying && this.queue.length === 0) {
+      this.finishStream();
+    }
+  }
+
+  private async finishStream() {
+    const waitTime = this.expectedEndTime - Date.now();
+    if (waitTime > 0) {
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+
+    if (this.isStreamStarted && this.avatarRef?.current) {
+      this.avatarRef.current.endStream();
+      this.isStreamStarted = false;
+    }
+    this.onEnd();
+    this.turnEnded = false;
   }
 
   private async playNext() {
     if (!this.queue || this.queue.length === 0) {
       this.isPlaying = false;
-      this.onEnd();
+      if (this.turnEnded) {
+        this.finishStream();
+      }
       return;
     }
 
-    // Wait for avatar to be ready if it's not yet
     let attempts = 0;
-    while (!this.avatarRef?.current && attempts < 50) {
-      console.log("[AudioQueue] ⏳ Waiting for avatar handle...");
+    while ((!this.avatarRef?.current || !this.avatarRef.current.isLoaded) && attempts < 100) {
+      if (attempts % 10 === 0) console.log("[AudioQueue] ⏳ Waiting for avatar to fully load...");
       await new Promise(r => setTimeout(r, 100));
       attempts++;
     }
@@ -480,27 +505,34 @@ class AudioQueue {
     if (item && this.avatarRef?.current) {
       this.isPlaying = true;
       try {
-        await this.avatarRef.current.speak(item.url, item.text);
+        if (!this.isStreamStarted) {
+          await this.avatarRef.current.startStream();
+          this.isStreamStarted = true;
+          this.expectedEndTime = Date.now();
+        }
+        const durationMs = await this.avatarRef.current.appendStream(item.text) || 0;
+        this.expectedEndTime = Math.max(this.expectedEndTime, Date.now()) + durationMs;
       } catch (e) {
-        console.error("[AudioQueue] Speak failed:", e);
-        this.playNext();
+        console.error("[AudioQueue] Stream request failed:", e);
       }
+      // Immediately request the next chunk to pre-fetch downloading
+      this.playNext();
     } else {
       console.warn("[AudioQueue] ✗ Skipping fragment: Avatar not found after wait.");
+      this.isPlaying = false;
       this.playNext();
     }
-  }
-
-  // TalkingHead will signal end, so we need a way to trigger playNext
-  signalEnd() {
-    this.playNext();
   }
 
   stop() {
     this.queue = [];
     this.isPlaying = false;
-    // TalkingHead doesn't have a simple stop yet in our wrapper, 
-    // but clearing the queue prevents next plays.
+    this.turnEnded = false;
+    this.expectedEndTime = 0;
+    if (this.isStreamStarted && this.avatarRef?.current) {
+      this.avatarRef.current.stop();
+      this.isStreamStarted = false;
+    }
   }
 }
 
@@ -548,6 +580,7 @@ export default function InterviewPage() {
 
   const audioQueueRef = useRef<AudioQueue | null>(null);
   const isIntroTriggeredRef = useRef(false);
+  const currentTurnIdRef = useRef(0);
 
   // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
   // ─── PIPELINE: Handle Chat Stream ──────────────────────────────────────────
@@ -559,6 +592,11 @@ export default function InterviewPage() {
       if (!audioQueueRef.current) {
         audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
       }
+
+      // Stop any current audio and increment turn ID
+      audioQueueRef.current.stop();
+      avatarRef.current?.stop();
+      const turnId = ++currentTurnIdRef.current;
 
       // Chat for next question (STREAMING), pass current pressure score
       const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
@@ -573,7 +611,8 @@ export default function InterviewPage() {
           job_text: jobText,
           interviewer_persona: interviewerPersona,
           pressure_score: pressureScore,
-          pressure_trend: pressureTrend
+          pressure_trend: pressureTrend,
+          history: transcript // Pass full transcript for context
         }),
       });
 
@@ -624,32 +663,19 @@ export default function InterviewPage() {
               updateLastTranscriptText(fullSentence);
 
               // ── TTS SENTENCE BREAK DETECTION ─────────────────────────────────────
-              if (/[.!?]$/.test(sentenceBuffer.trim())) {
+              // Chunk by commas and punctuation if length is > 15 to minimize API wait time
+              if (/[,.!?;\n:]$/.test(sentenceBuffer.trim()) && sentenceBuffer.trim().length > 15) {
                 const fragmentForTTS = sentenceBuffer.trim();
                 sentenceBuffer = ""; // Reset buffer for next sentence
 
                 setIsSpeaking(true);
-                fetch('http://127.0.0.1:8080/api/tts', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ text: fragmentForTTS }),
-                })
-                  .then(r => {
-                    if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
-                    return r.blob();
-                  })
-                  .then(blob => {
-                    if (audioQueueRef.current) {
-                      audioQueueRef.current.add(URL.createObjectURL(blob), fragmentForTTS);
-                    }
-                  })
-                  .catch(err => {
-                    console.error("TTS Fetch Error:", err);
-                    // If TTS fails, we should at least not stay "Speaking" forever if queue is empty
-                    if (audioQueueRef.current && !audioQueueRef.current.isPlaying) {
-                      setIsSpeaking(false);
-                    }
-                  });
+
+                // Only add if we are still in the same turn
+                if (turnId === currentTurnIdRef.current && audioQueueRef.current) {
+                  audioQueueRef.current.add(fragmentForTTS);
+                } else {
+                  console.log(`[DEBUG] Ignoring stale TTS fragment (Turn ${turnId} vs ${currentTurnIdRef.current})`);
+                }
               }
             } else if (data.done) {
               setQuestionIndex(data.next_index);
@@ -659,6 +685,10 @@ export default function InterviewPage() {
                 updateEloScore(data.quality_score);
               } else {
                 console.log("[DEBUG] Safe Skip: ELO update bypassed.");
+              }
+
+              if (audioQueueRef.current && turnId === currentTurnIdRef.current) {
+                audioQueueRef.current.signalEndTurn();
               }
 
               if (data.is_finished) {
@@ -672,26 +702,17 @@ export default function InterviewPage() {
       // Final tail fragment if it didn't end with punctuation
       if (sentenceBuffer.trim().length > 0) {
         const fragmentForTTS = sentenceBuffer.trim();
-        fetch('http://127.0.0.1:8080/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: fragmentForTTS }),
-        })
-          .then(r => {
-            if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
-            return r.blob();
-          })
-          .then(blob => {
-            if (audioQueueRef.current) {
-              audioQueueRef.current.add(URL.createObjectURL(blob), fragmentForTTS);
-            }
-          })
-          .catch(err => {
-            console.error("TTS Fetch Error (final fragment):", err);
-            if (audioQueueRef.current && !audioQueueRef.current.isPlaying) {
-              setIsSpeaking(false);
-            }
-          });
+        setIsSpeaking(true);
+        if (turnId === currentTurnIdRef.current && audioQueueRef.current) {
+          audioQueueRef.current.add(fragmentForTTS);
+        } else {
+          console.log(`[DEBUG] Ignoring stale final TTS fragment`);
+        }
+      }
+
+      // Safety net to ensure the stream completes if the response was very small
+      if (audioQueueRef.current && turnId === currentTurnIdRef.current) {
+        audioQueueRef.current.signalEndTurn();
       }
 
     } catch (err) {
@@ -1030,18 +1051,9 @@ export default function InterviewPage() {
           audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
         }
         setIsSpeaking(true);
-        fetch('http://127.0.0.1:8080/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
-        }).then(r => r.blob()).then(blob => {
-          if (audioQueueRef.current) {
-            audioQueueRef.current.add(URL.createObjectURL(blob), text);
-          }
-        }).catch(err => {
-          console.error("Debug speak failed:", err);
-          setIsSpeaking(false);
-        });
+        if (audioQueueRef.current) {
+          audioQueueRef.current.add(text);
+        }
       };
     }
   }, [avatarRef, setIsSpeaking]);
@@ -1049,6 +1061,9 @@ export default function InterviewPage() {
 
   // ── AI Intro Logic ────────────────────────────────────────────────────────
   useEffect(() => {
+    // Only trigger the intro once the interview is fully live and ready
+    if (!isReady) return;
+
     // If we already have a transcript (from upload page), just trigger TTS for it
     if (transcript.length > 0 && transcript[0].speaker === "interviewer" && !isIntroTriggeredRef.current) {
       console.log("[DEBUG] First question already present, triggering TTS...");
@@ -1056,22 +1071,12 @@ export default function InterviewPage() {
 
       const firstText = transcript[0].text;
       setIsSpeaking(true);
-      fetch('http://127.0.0.1:8080/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: firstText }),
-      })
-        .then(r => r.blob())
-        .then(blob => {
-          if (!audioQueueRef.current) {
-            audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
-          }
-          audioQueueRef.current.add(URL.createObjectURL(blob), firstText);
-        })
-        .catch(err => {
-          console.error("Initial TTS failed:", err);
-          setIsSpeaking(false);
-        });
+      if (!audioQueueRef.current) {
+        audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+      }
+      audioQueueRef.current.add(firstText);
+      audioQueueRef.current.signalEndTurn();
+
       return;
     }
 
@@ -1084,7 +1089,7 @@ export default function InterviewPage() {
         setIsProcessing(false);
       });
     }
-  }, [sessionId, transcript.length]);
+  }, [sessionId, transcript.length, isReady]);
 
   // ── Timer Logic ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1173,8 +1178,7 @@ export default function InterviewPage() {
               avatarRef={avatarRef}
               onAudioStart={() => setIsSpeaking(true)}
               onAudioEnd={() => {
-                // signal next in queue
-                if (audioQueueRef.current) audioQueueRef.current.signalEnd();
+                // UI state handled by audioQueue.finishStream() now
               }}
               pressureScore={pressureScore}
               pressureTrend={pressureTrend}

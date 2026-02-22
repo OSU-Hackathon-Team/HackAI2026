@@ -341,6 +341,8 @@ async def init_session(request):
                     persona_prompt = f.read()
 
         system_prompt = (
+            f"{BASE_PROMPT}\n\n"
+            "--- CURRENT INTERVIEWER PERSONA ---\n"
             f"{persona_prompt}\n\n"
             "Based on the candidate's resume and the job description, "
             "introduce yourself briefly and ask an introductory question about their background. "
@@ -389,7 +391,17 @@ async def chat(request):
     job_text = data.get('job_text', '')
     interviewer_persona_id = data.get('interviewer_persona', '')
     pressure_score = data.get('pressure_score', 50)
-    pressure_trend = data.get('pressure_trend', 'stable')  # 'rising' | 'falling' | 'stable'
+    pressure_trend = data.get('pressure_trend', 'stable')
+    history = data.get('history', [])
+
+    # Format history for prompt context
+    history_context = ""
+    if history:
+        history_context = "--- CONVERSATION HISTORY ---\n"
+        for entry in history:
+            speaker = "CANDIDATE" if entry.get('speaker') == 'user' else "INTERVIEWER"
+            history_context += f"{speaker}: {entry.get('text')}\n"
+        history_context += "\n"
 
     print(f"[DEBUG] /api/chat hit! session={session_id}, text='{user_text[:50]}...', index={question_index}")
     
@@ -457,6 +469,7 @@ async def chat(request):
         f"{BASE_PROMPT}\n\n"
         f"--- CURRENT INTERVIEWER PERSONA ---\n"
         f"{persona_prompt}\n\n"
+        f"{history_context}"
         f"--- ADAPTIVE DIFFICULTY INSTRUCTION ---\n"
         f"{difficulty_mode}{trend_modifier}\n\n"
         "Keep your response under 3 sentences. "
@@ -602,8 +615,9 @@ async def chat(request):
         async def finalize_turn_async():
             try:
                 if session_id:
-                    # Log the basic turn data immediately
-                    supabase_logger.log_keyframe(
+                    # Offload the blocking HTTP request to a background thread
+                    await asyncio.to_thread(
+                        supabase_logger.log_keyframe,
                         session_id=session_id,
                         timestamp_sec=float(timestamp_sec),
                         interviewer_question=f"Dynamic Question {question_index}",
@@ -612,25 +626,44 @@ async def chat(request):
                         keyframe_reason=f"AI Turn - Q{question_index + 1}"
                     )
                     
-                    # Wait slightly for biometric run_metrics_background tasks to finish logging
-                    await asyncio.sleep(2) 
+                    # Wait longer (10s) to give TTS and immediate playback a clear head start
+                    await asyncio.sleep(10) 
                     
-                    # Run full report analysis
-                    print(f"[DEBUG] background analysis starting for {session_id}...")
-                    report = await analyzer_engine.generate_report(session_id, persona_prompt or "Standard Technical Interviewer")
-                    supabase_logger.save_report(session_id, report)
-                    print(f"[DEBUG] background analysis complete for {session_id}")
+                    # Run full report analysis only every 3 turns to save on latency/crashes
+                    if question_index % 3 == 0:
+                        print(f"[DEBUG] background analysis starting for {session_id}...")
+                        try:
+                            # Use a timeout for the heavy analysis engine
+                            report = await asyncio.wait_for(
+                                analyzer_engine.generate_report(session_id, persona_prompt or "Standard Technical Interviewer"),
+                                timeout=45.0
+                            )
+                            # Offload the blocking save report call to a background thread
+                            await asyncio.to_thread(supabase_logger.save_report, session_id, report)
+                            print(f"[DEBUG] background analysis complete for {session_id}")
+                        except asyncio.TimeoutError:
+                            print(f"[WARNING] background analysis timed out for {session_id}")
+                        except Exception as e:
+                            print(f"[ERROR] background analysis failed: {e}")
             except Exception as bg_err:
                 logger.error(f"Background Finalization Error: {bg_err}")
 
-        # Fire and forget WITHOUT awaiting in the handler
-        asyncio.create_task(finalize_turn_async())
+        # No-op here, task fire moved to finally block or just before return
+        pass
 
     except Exception as e:
         logger.error(f"Chat Stream Error: {e}")
-        await response.write(f"data: {json.dumps({'error': str(e)})}\n\n".encode())
+        try:
+            await response.write(f"data: {json.dumps({'error': str(e)})}\n\n".encode())
+        except: pass
     
-    await response.write_eof()
+    finally:
+        await response.write_eof()
+        # Fire and forget WITHOUT awaiting in the handler, 
+        # but do it AFTER eof is written to free up the stream
+        if not is_skip and 'finalize_turn_async' in locals():
+            asyncio.create_task(finalize_turn_async())
+
     return response
 
 async def tts(request):
@@ -641,47 +674,55 @@ async def tts(request):
         gemini = get_gemini_client()
         audio_prompt = f"Please read the following text aloud naturally and professionally:\n\n{text}"
         
-        print(f"[DEBUG] Requesting TTS from Gemini...")
-        # We use a 30s timeout to avoid indefinite hangs
-        start_time = asyncio.get_event_loop().time()
-        response = await asyncio.wait_for(
-            gemini.aio.models.generate_content(
-                model="models/gemini-2.5-flash-preview-tts",
-                contents=audio_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["AUDIO"],
-                )
-            ),
-            timeout=30.0
-        )
-        end_time = asyncio.get_event_loop().time()
-        print(f"[DEBUG] Gemini TTS response received in {end_time - start_time:.2f}s")
+        print(f"[DEBUG] Requesting streaming TTS from Gemini...")
         
-        audio_bytes = None
-        for part in response.candidates[0].content.parts:
-            if hasattr(part, 'inline_data') and part.inline_data:
-                audio_bytes = part.inline_data.data
-                break
-            elif hasattr(part, 'blob') and part.blob:
-                audio_bytes = part.blob.data
-                break
+        # Prepare the streaming response
+        response = web.StreamResponse(
+            status=200,
+            reason='OK',
+            headers={
+                'Content-Type': 'application/octet-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+            }
+        )
+        await response.prepare(request)
+
+        start_time = asyncio.get_event_loop().time()
+        first_chunk = True
+        
+        # Call generate_content_stream
+        gemini_stream_coro = gemini.aio.models.generate_content_stream(
+            model="models/gemini-2.5-flash-preview-tts",
+            contents=audio_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+            )
+        )
+        
+        # We need to await the stream generator
+        async for chunk in await gemini_stream_coro:
+            if first_chunk:
+                first_time = asyncio.get_event_loop().time()
+                print(f"[DEBUG] Gemini TTS first chunk received in {first_time - start_time:.2f}s")
+                first_chunk = False
                 
-        if not audio_bytes:
-            part_types = [type(p).__name__ for p in response.candidates[0].content.parts]
-            logger.error(f"No audio data found in response parts. Types present: {part_types}")
-            raise ValueError("No audio data returned from Gemini")
+            if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
+                continue
+                
+            part = chunk.candidates[0].content.parts[0]
+            if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
+                audio_bytes = part.inline_data.data
+                await response.write(audio_bytes)
+            elif hasattr(part, 'blob') and part.blob and part.blob.data:
+                audio_bytes = part.blob.data
+                await response.write(audio_bytes)
 
-        print(f"[DEBUG] Audio bytes received (size: {len(audio_bytes)}). Writing to temp file...")
-        temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.wav")
-        import wave
-        with wave.open(temp_audio, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2) # 16-bit
-            wav_file.setframerate(24000) # Gemini outputs 24kHz PCM
-            wav_file.writeframes(audio_bytes)
-
-        print(f"[DEBUG] TTS complete. Serving file: {temp_audio}")
-        return web.FileResponse(temp_audio)
+        await response.write_eof()
+        end_time = asyncio.get_event_loop().time()
+        print(f"[DEBUG] TTS stream complete in {end_time - start_time:.2f}s")
+        return response
+        
     except Exception as e:
         logger.error(f"Gemini TTS Error: {e}")
         return web.json_response({"error": str(e)}, status=500)

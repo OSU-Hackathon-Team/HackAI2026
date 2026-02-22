@@ -176,14 +176,10 @@ export const useInterviewStore = create<InterviewStore>()(
           performanceHistory: [...state.performanceHistory, qualityA].slice(-5)
         };
       }),
-<<<<<<< HEAD
-      updatePressureScore: (rawScore) => set({ pressureScore: rawScore }),
-=======
       updatePressureScore: (rawScore) => set((state) => {
         // Legacy fallback or combined logic if needed
         return { pressureScore: state.pressureScore }; // No-op for now as we use ELO
       }),
->>>>>>> 9d62849b8df63315fccd8641a2eab624b769362e
       clearSessionData: () =>
         set({
           sessionId: null,

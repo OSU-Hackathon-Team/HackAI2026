@@ -63,20 +63,26 @@ class InterviewAnalyzerEngine:
 
         loop = asyncio.get_running_loop()
         
-        # Max 15 retries (approx 15 seconds total)
-        for attempt in range(15):
+        # Reduced retries (10 instead of 15) and increased sleep slightly to be less CPU intensive
+        # We also jump out early if we see NO keyframes at all for 5 seconds (means nothing recorded)
+        for attempt in range(10):
             keyframes = await loop.run_in_executor(None, _fetch_sync)
             
             # Check if we have any keyframes with actual biometric metrics
             has_metrics = any(k.get("keyframe_reason") == "Background Analysis" for k in keyframes)
             
-            if not wait_for_metrics or has_metrics or not keyframes:
+            if not wait_for_metrics or has_metrics:
                 if has_metrics:
                     print(f"[DEBUG] Analyzer Engine: Found metrics data for {session_id} on attempt {attempt+1}")
                 break
                 
-            print(f"[DEBUG] Analyzer Engine: No metrics found yet for {session_id}. Retrying... ({attempt+1}/15)")
-            await asyncio.sleep(1)
+            # If after 5 attempts no keyframes exist at all, something might be wrong or it's a silent turn
+            if attempt > 5 and not keyframes:
+                print(f"[DEBUG] Analyzer Engine: No keyframes exist for {session_id} after multiple polls. Stopping.")
+                break
+
+            print(f"[DEBUG] Analyzer Engine: No metrics found yet for {session_id}. Retrying... ({attempt+1}/10)")
+            await asyncio.sleep(1.5)
             
         return keyframes
 
