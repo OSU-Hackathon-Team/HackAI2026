@@ -1972,39 +1972,53 @@ function CameraPanel({ videoRef, cameraOn, micOn, onToggleCamera, onToggleMic, i
         </div>
       )}
 
-      {/* Record button */}
-      {cameraOn && isReady && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {/* Bottom bar */}
+      <div style={{ position: "absolute", bottom: "40px", left: 0, right: 0, padding: "0 1.25rem", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 20 }}>
+
+        {/* Left: User Status */}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", background: "rgba(0,0,0,0.45)", padding: "0.4rem 0.7rem", borderRadius: "8px", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.05)" }}>
+          <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: cameraOn ? "#ff4d6d" : "rgba(255,255,255,0.2)", boxShadow: cameraOn ? "0 0 8px #ff4d6d" : "none", animation: cameraOn ? "blink 2s ease-in-out infinite" : "none" }} />
+          <span style={{ fontFamily: "var(--mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.6)", letterSpacing: "0.14em", fontWeight: 600 }}>YOU</span>
+        </div>
+
+        {/* Center: Record button */}
+        {cameraOn && isReady && (
           <button
             onClick={isRecording ? onStopRecording : onStartRecording}
             disabled={isProcessing || isSpeaking}
-            style={{ padding: "0.75rem 1.5rem", borderRadius: "99px", border: "none", background: isRecording ? "rgba(255,77,109,0.9)" : "rgba(95,200,255,0.9)", color: "#060810", fontWeight: 800, fontSize: "0.8rem", fontFamily: "var(--mono)", cursor: (isProcessing || isSpeaking) ? "not-allowed" : "pointer", boxShadow: isRecording ? "0 0 30px rgba(255,77,109,0.5)" : "0 0 30px rgba(95,200,255,0.4)", display: "flex", alignItems: "center", gap: "0.5rem", transition: "all 0.25s ease", opacity: (isProcessing || isSpeaking) ? 0.5 : 1, letterSpacing: "0.06em" }}
+            style={{
+              padding: "0.55rem 1.25rem",
+              borderRadius: "10px",
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: isRecording ? "rgba(255,77,109,0.95)" : "rgba(95,200,255,0.92)",
+              color: "#060810",
+              fontWeight: 800,
+              fontSize: "0.72rem",
+              fontFamily: "var(--mono)",
+              cursor: (isProcessing || isSpeaking) ? "not-allowed" : "pointer",
+              boxShadow: isRecording ? "0 4px 20px rgba(255,77,109,0.3)" : "0 4px 20px rgba(95,200,255,0.25)",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              opacity: (isProcessing || isSpeaking) ? 0.5 : 1,
+              letterSpacing: "0.04em",
+              transform: "translateY(-2px)"
+            }}
           >
-            {isRecording && <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#fff", animation: "pulse-ring 1.2s infinite" }} />}
-            {isProcessing ? "PROCESSING..." : isSpeaking ? "AI SPEAKING..." : isRecording ? "STOP & SUBMIT" : "RECORD ANSWER"}
+            {isRecording && <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#fff", animation: "pulse-ring 1.2s infinite" }} />}
+            <span style={{ whiteSpace: "nowrap" }}>
+              {isProcessing ? "PROCESSING" : isSpeaking ? "AI_SPEAKING" : isRecording ? "SUBMIT" : "RECORD_ANSWER"}
+            </span>
           </button>
-        </div>
-      )}
+        )}
 
-      {/* Camera off state */}
-      {!cameraOn && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#04060e", gap: "0.6rem" }}>
-          <div style={{ color: "rgba(255,255,255,0.15)" }}><CameraIcon off={true} /></div>
-          <span style={{ fontFamily: "var(--mono)", fontSize: "0.58rem", color: "rgba(255,255,255,0.15)", letterSpacing: "0.14em" }}>CAMERA OFFLINE</span>
-        </div>
-      )}
-
-      {/* Bottom bar */}
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "0.6rem 0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", background: "linear-gradient(to top,rgba(0,0,0,0.7),transparent)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-          <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: cameraOn ? "#ff4d6d" : "rgba(255,255,255,0.2)", boxShadow: cameraOn ? "0 0 6px #ff4d6d" : "none", animation: cameraOn ? "blink 2s ease-in-out infinite" : "none" }} />
-          <span style={{ fontFamily: "var(--mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.5)", letterSpacing: "0.12em" }}>YOU</span>
-        </div>
-        <div style={{ display: "flex", gap: "0.4rem" }}>
-          <button onClick={onToggleCamera} style={{ width: "30px", height: "30px", borderRadius: "50%", border: `1px solid ${cameraOn ? "rgba(255,255,255,0.15)" : "rgba(255,77,109,0.4)"}`, background: cameraOn ? "rgba(255,255,255,0.08)" : "rgba(255,77,109,0.15)", color: cameraOn ? "rgba(255,255,255,0.6)" : "#ff4d6d", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(8px)", transition: "all 0.2s" }}>
+        {/* Right: Device Toggles */}
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button onClick={onToggleCamera} style={{ width: "34px", height: "34px", borderRadius: "50%", border: `1px solid ${cameraOn ? "rgba(255,255,255,0.12)" : "rgba(255,77,109,0.4)"}`, background: cameraOn ? "rgba(255,255,255,0.08)" : "rgba(255,77,109,0.15)", color: cameraOn ? "rgba(255,255,255,0.7)" : "#ff4d6d", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(10px)", transition: "all 0.2s" }}>
             <CameraIcon off={!cameraOn} />
           </button>
-          <button onClick={onToggleMic} style={{ width: "30px", height: "30px", borderRadius: "50%", border: `1px solid ${micOn ? "rgba(255,255,255,0.15)" : "rgba(255,77,109,0.4)"}`, background: micOn ? "rgba(255,255,255,0.08)" : "rgba(255,77,109,0.15)", color: micOn ? "rgba(255,255,255,0.6)" : "#ff4d6d", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(8px)", transition: "all 0.2s" }}>
+          <button onClick={onToggleMic} style={{ width: "34px", height: "34px", borderRadius: "50%", border: `1px solid ${micOn ? "rgba(255,255,255,0.12)" : "rgba(255,77,109,0.4)"}`, background: micOn ? "rgba(255,255,255,0.08)" : "rgba(255,77,109,0.15)", color: micOn ? "rgba(255,255,255,0.7)" : "#ff4d6d", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", backdropFilter: "blur(10px)", transition: "all 0.2s" }}>
             <MicIcon off={!micOn} />
           </button>
         </div>
