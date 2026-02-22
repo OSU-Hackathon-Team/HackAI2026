@@ -9,7 +9,7 @@ openai
 google-genai
 scipy
 opencv-python
-whisper
+openai-whisper
 torch
 torchvision
 mediapipe
@@ -17,3 +17,4 @@ numpy
 aiohttp-cors
 httpx
 requests
+av

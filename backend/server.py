@@ -335,10 +335,20 @@ async def init_session(request):
         # Load persona prompt
         persona_prompt = "You are an expert AI Interviewer."
         if interviewer_persona_id:
-            persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
+            persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.json")
             if os.path.exists(persona_path):
-                with open(persona_path, 'r') as f:
-                    persona_prompt = f.read()
+                try:
+                    with open(persona_path, 'r') as f:
+                        data = json.load(f)
+                        persona_prompt = f"PERSONA: {data.get('name')}\n"
+                        persona_prompt += f"ROLE: {data.get('role')}\n"
+                        persona_prompt += f"TRAITS: {data.get('traits')}\n\n"
+                        persona_prompt += f"YOUR MISSION:\n{data.get('description')}\n"
+                        if data.get('example_reaction'):
+                            persona_prompt += f"\nEXAMPLE REACTION: {data.get('example_reaction')}"
+                except Exception as e:
+                    logger.error(f"Error loading persona JSON: {e}")
+
 
         system_prompt = (
             f"{BASE_PROMPT}\n\n"
@@ -408,10 +418,20 @@ async def chat(request):
     # Load base persona prompt
     persona_prompt = "You are a professional technical interviewer for AceIt."
     if interviewer_persona_id:
-        persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
+        persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.json")
         if os.path.exists(persona_path):
-            with open(persona_path, 'r') as f:
-                persona_prompt = f.read()
+            try:
+                with open(persona_path, 'r') as f:
+                    data = json.load(f)
+                    persona_prompt = f"PERSONA: {data.get('name')}\n"
+                    persona_prompt += f"ROLE: {data.get('role')}\n"
+                    persona_prompt += f"TRAITS: {data.get('traits')}\n\n"
+                    persona_prompt += f"YOUR MISSION:\n{data.get('description')}\n"
+                    if data.get('example_reaction'):
+                        persona_prompt += f"\nEXAMPLE REACTION: {data.get('example_reaction')}"
+            except Exception as e:
+                logger.error(f"Error loading persona JSON: {e}")
+
 
     # ── CHESS ENGINE: Adaptive Difficulty Tiers (HARSHER) ─────────────────────────────
     if pressure_score < 20:
@@ -475,15 +495,16 @@ async def chat(request):
         "Keep your response under 3 sentences. "
         "First, react to the candidate's last answer in 1 sentence (do not be generic). "
         f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}...\n\n"
-        "CRITICAL FINAL INSTRUCTION: You MUST evaluate the candidate's last answer and assign a quality score A (0.0 to 1.0).\n"
-        "Scoring Rubric (BE FAIR BUT DESCRIPTIVE):\n"
+        "CRITICAL GRADING INSTRUCTION: You MUST evaluate the candidate's last answer and assign a quality score A (0.0 to 1.0).\n"
+        "IMPORTANT: Decouple your persona's tone from this grade. Even if your persona is skeptical, aggressive, or cold, you MUST give a high score (0.8-1.0) if the candidate provides specific, deep technical details (e.g., race conditions, idempotency, architectural trade-offs).\n"
+        "Scoring Rubric (BE OBJECTIVE AND REWARD TECHNICAL DEPTH):\n"
         "- 0.0-0.1: Says 'no', one-word/vague answer, deflects, or low effort.\n"
         "- 0.2-0.3: Basic but incomplete or factually weak answer.\n"
         "- 0.4-0.6: Solid, standard technical answer covering the basics.\n"
-        "- 0.7-0.8: Strong technical answer with specific architectural details or examples.\n"
-        "- 0.9-1.0: Mastery. Exceptional depth, trade-offs, and scalability considerations.\n"
+        "- 0.7-0.8: Strong technical answer with specific architectural details or complex problem solving.\n"
+        "- 0.9-1.0: Mastery. Exceptional depth, trade-offs, scalability, and specific advanced technical concepts.\n"
         "\n"
-        "At the VERY END of your response, you MUST output a score tag in this EXACT format: [SCORE: 0.95] (using your calculated value between 0.0 and 1.0). "
+        "At the VERY END of your response, you MUST output a score tag in this EXACT format: [SCORE: 0.95]. "
         "DO NOT SKIP THIS TAG."
     )
     # Determine if this is the start of the interview
@@ -561,49 +582,35 @@ async def chat(request):
             try:
                 quality_score = float(match.group(1))
                 print(f"[DEBUG] Extracted quality_score: {quality_score}")
-                # Clean up the display text by removing the score tag (case insensitive)
+                # Clean up the display text by removing the score tag
                 full_ai_response = re.sub(r"\[SCORE:\s*\d+\.?\d*\]", "", full_ai_response, flags=re.IGNORECASE).strip()
             except Exception as e:
                 print(f"[DEBUG] Failed to parse quality_score from match: {match.group(1)} - {e}")
                 pass
         else:
-            # Try a looser match if the bracket format fails
-            alt_match = re.search(r"SCORE:\s*(\d+\.?\d*)", full_ai_response, re.IGNORECASE)
-            if alt_match:
+            # Progressive fallbacks:
+            # 1. Any bracketed number anywhere: [0.2]
+            res = re.search(r"\[(\d+\.?\d*)]", full_ai_response)
+            if not res:
+                # 2. "Score: X" anywhere
+                res = re.search(r"score:\s*(\d+\.?\d*)", full_ai_response, re.IGNORECASE)
+            if not res:
+                # 3. Any decimal number at the very end
+                res = re.search(r"(\d\.\d+)\s*$", full_ai_response)
+            
+            if res:
                 try:
-                    quality_score = float(alt_match.group(1))
-                    print(f"[DEBUG] Extracted fallback quality_score: {quality_score}")
-                    full_ai_response = re.sub(r"SCORE:\s*\d+\.?\d*", "", full_ai_response, flags=re.IGNORECASE).strip()
-                except:
-                    pass
-            else:
-                # Check if it outputted the literal placeholder from my mistake
-                if "SCORE: X.X" in full_ai_response:
-                    print(f"[ERROR] LLM outputted terminal 'X.X' literally. Check prompt instructions.")
-                
-                # Progressive fallbacks:
-                # 1. Any bracketed number anywhere: [0.2]
-                res = re.search(r"\[(\d+\.?\d*)]", full_ai_response)
-                if not res:
-                    # 2. "Score: X" anywhere
-                    res = re.search(r"score:\s*(\d+\.?\d*)", full_ai_response, re.IGNORECASE)
-                if not res:
-                    # 3. Any decimal number at the very end
-                    res = re.search(r"(\d\.\d+)\s*$", full_ai_response)
-                
-                if res:
-                    try:
-                        quality_score = float(res.group(1))
-                        print(f"[DEBUG] Robust extraction recovered: {quality_score}")
-                    except: pass
+                    quality_score = float(res.group(1))
+                    print(f"[DEBUG] Robust extraction recovered: {quality_score}")
+                except: pass
 
-                if quality_score == 0.5:
-                    tail = full_ai_response[-100:].replace('\n', ' ')
-                    print(f"[DEBUG] Extraction failed. Raw tail: ...{tail}")
+            if quality_score == 0.5:
+                tail = full_ai_response[-100:].replace('\n', ' ')
+                print(f"[DEBUG] Extraction failed. Raw tail: ...{tail}")
 
         # Send metadata at the end including the quality score A
-        print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}")
-        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished, 'skip_scoring': is_skip})}\n\n".encode())
+        print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}, score: {quality_score}")
+        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
 
         # ── BACKGROUND: Supabase Logging & Analysis ──
         # Skip logging if this was a "safe skip" (empty response after intro)
@@ -669,7 +676,8 @@ async def chat(request):
 async def tts(request):
     data = await request.json()
     text = data.get('text', '')
-    print(f"[DEBUG] /api/tts hit! Length: {len(text)} chars")
+    voice_name = data.get('voice', 'Puck')
+    print(f"[DEBUG] /api/tts hit! Length: {len(text)} chars, Voice: {voice_name}")
     try:
         gemini = get_gemini_client()
         audio_prompt = f"Please read the following text aloud naturally and professionally:\n\n{text}"
@@ -809,6 +817,29 @@ async def get_report_handler(request):
     
     return web.json_response(report_data)
 
+async def log_skip_handler(request):
+    try:
+        data = await request.json()
+        session_id = data.get('session_id')
+        question = data.get('question', 'Unknown Question')
+        timestamp_sec = data.get('timestamp_sec', 0.0)
+        
+        if not session_id:
+            return web.json_response({"error": "No session_id provided"}, status=400)
+            
+        supabase_logger.log_keyframe(
+            session_id=session_id,
+            timestamp_sec=float(timestamp_sec),
+            interviewer_question=question,
+            keyframe_reason="User Skip",
+            associated_transcript="[USER SKIPPED QUESTION]"
+        )
+        print(f"[DEBUG] Skip event logged for session={session_id}: {question}")
+        return web.json_response({"status": "success"})
+    except Exception as e:
+        logger.error(f"Log skip error: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
 async def get_session_data_handler(request):
     session_id = request.match_info.get('session_id')
     if not session_id:
@@ -880,6 +911,40 @@ async def get_session_details_handler(request):
         
     return web.json_response({"data": metadata})
 
+async def get_jobs_handler(request):
+    jobs_dir = os.path.join(BACKEND_DIR, "prompts", "job_descriptions")
+    jobs = []
+    if os.path.exists(jobs_dir):
+        for filename in sorted(os.listdir(jobs_dir)):
+            if filename.endswith(".json"):
+                with open(os.path.join(jobs_dir, filename), "r") as f:
+                    try:
+                        job_data = json.load(f)
+                        job_data["id"] = filename.replace(".json", "")
+                        jobs.append(job_data)
+                    except Exception as e:
+                        logger.error(f"Error loading job {filename}: {e}")
+    return web.json_response({"jobs": jobs})
+
+async def get_interviewers_handler(request):
+    interviewers_dir = os.path.join(BACKEND_DIR, "prompts", "interviewers")
+    interviewers = []
+    if os.path.exists(interviewers_dir):
+        # Sort files to maintain order if needed, but normally frontend might sort by sector/difficulty
+        for filename in sorted(os.listdir(interviewers_dir)):
+            if filename.endswith(".json"):
+                try:
+                    with open(os.path.join(interviewers_dir, filename), "r") as f:
+                        interviewer_data = json.load(f)
+                        # Ensure ID matches filename just in case
+                        if "id" not in interviewer_data:
+                            interviewer_data["id"] = filename.replace(".json", "")
+                        interviewers.append(interviewer_data)
+                except Exception as e:
+                    logger.error(f"Error loading interviewer {filename}: {e}")
+    return web.json_response({"interviewers": interviewers})
+
+
 async def on_shutdown(app):
     # close peer connections
     coros = [pc.close() for pc in pcs]
@@ -930,6 +995,9 @@ if __name__ == "__main__":
         app.router.add_get("/api/get-session-details", get_session_details_handler)
         app.router.add_post("/api/save-session", save_session_handler)
         app.router.add_get("/api/get-sessions", get_sessions_handler)
+        app.router.add_get("/api/jobs", get_jobs_handler)
+        app.router.add_get("/api/interviewers", get_interviewers_handler)
+        app.router.add_post("/api/log-skip", log_skip_handler)
 
         # Add CORS to all routes
         for route in list(app.router.routes()):

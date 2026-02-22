@@ -318,11 +318,13 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
                     const dataView = new DataView(combined.buffer, combined.byteOffset, combined.byteLength);
                     const sampleCount = Math.floor(combined.byteLength / 2);
                     audioBuffer = head.audioCtx.createBuffer(1, sampleCount, 24000);
-                    const channelData = audioBuffer.getChannelData(0);
-                    for (let i = 0; i < sampleCount; i++) {
-                        // getInt16(byteOffset, littleEndian)
-                        const int16 = dataView.getInt16(i * 2, true);
-                        channelData[i] = int16 / 32768.0;
+                    if (audioBuffer) {
+                        const channelData = audioBuffer.getChannelData(0);
+                        for (let i = 0; i < sampleCount; i++) {
+                            // getInt16(byteOffset, littleEndian)
+                            const int16 = dataView.getInt16(i * 2, true);
+                            channelData[i] = int16 / 32768.0;
+                        }
                     }
                 }
 

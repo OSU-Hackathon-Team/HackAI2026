@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import dynamic from "next/dynamic";
 import { AvatarHandle } from "@/components/Avatar";
-import { INTERVIEWERS } from "@/types/interviewer";
+
 
 const Avatar = dynamic(() => import("@/components/Avatar"), { ssr: false });
 
@@ -74,6 +74,60 @@ function ScoreRing({ label, value, color }: { label: string; value: number; colo
   );
 }
 
+// ─── HUD METRIC CIRCLE ──────────────────────────────────────────────────────
+function HUDMetric({ label, value, color, glowColor }: { label: string; value: number; color: string; glowColor: string }) {
+  const r = 24;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (value / 100) * circ;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.6rem", flex: 1 }}>
+      <div style={{ position: "relative", width: "64px", height: "64px" }}>
+        {/* Background Ring */}
+        <svg width="64" height="64" viewBox="0 0 64 64" style={{ position: "absolute", top: 0, left: 0 }}>
+          <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="3" />
+          <circle
+            cx="32" cy="32" r={r} fill="none" stroke={color} strokeWidth="3"
+            strokeDasharray={circ} strokeDashoffset={offset}
+            strokeLinecap="round" transform="rotate(-90 32 32)"
+            style={{
+              transition: "stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)",
+              filter: `drop-shadow(0 0 6px ${glowColor})`
+            }}
+          />
+        </svg>
+        {/* Digital Value */}
+        <div style={{
+          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "var(--font-mono)", fontSize: "1rem", color: "#fff", fontWeight: 700,
+          textShadow: `0 0 10px ${glowColor}`
+        }}>
+          {Math.round(value)}
+        </div>
+      </div>
+      <div style={{
+        fontFamily: "var(--font-mono)",
+        fontSize: "0.55rem",
+        color: "rgba(255,255,255,0.3)",
+        letterSpacing: "0.2em",
+        fontWeight: 600
+      }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
+// ─── PRESSURE GAUGE HELPERS ──────────────────────────────────────────────────
+const getColor = (s: number) => {
+  // Smooth color interpolation
+  if (s < 25) return "#00e096";  // Mint green
+  if (s < 50) return "#caff00";  // Acid green
+  if (s < 70) return "#ffcc00";  // Yellow
+  if (s < 85) return "#ff8800";  // Orange
+  return "#ff2200";               // Red
+};
+
 // ─── PRESSURE GAUGE ───────────────────────────────────────────────────────────
 function PressureGauge({ score, trend }: { score: number; trend: "rising" | "falling" | "stable" }) {
   const getDifficultyLabel = (s: number) => {
@@ -85,16 +139,7 @@ function PressureGauge({ score, trend }: { score: number; trend: "rising" | "fal
     return { label: "ELITE", sub: "MAXIMUM PRESSURE" };
   };
 
-  const getColor = (s: number) => {
-    // Smooth color interpolation
-    if (s < 25) return "#00e096";  // Mint green
-    if (s < 50) return "#caff00";  // Acid green
-    if (s < 70) return "#ffcc00";  // Yellow
-    if (s < 85) return "#ff8800";  // Orange
-    return "#ff2200";               // Red
-  };
-
-  const { label, sub } = getDifficultyLabel(score);
+  const labelData = getDifficultyLabel(score);
   const color = getColor(score);
   const trendIcon = trend === "rising" ? "▲" : trend === "falling" ? "▼" : "─";
   const trendColor = trend === "rising" ? "#ff5500" : trend === "falling" ? "#00e096" : "rgba(255,255,255,0.3)";
@@ -105,8 +150,8 @@ function PressureGauge({ score, trend }: { score: number; trend: "rising" | "fal
         <div style={{ zIndex: 3 }}>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.15em", marginBottom: "0.2rem" }}>DIFFICULTY_ENGINE</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", color, fontWeight: 800, letterSpacing: "0.08em" }}>{label}</span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>{sub}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", color, fontWeight: 800, letterSpacing: "0.08em" }}>{labelData.label}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>{labelData.sub}</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", zIndex: 3 }}>
@@ -141,40 +186,45 @@ function scorePerformance(text: string): number {
   const sig = (x: number, center: number, slope: number) =>
     Math.tanh((x - center) / slope);
 
-  const depthScore = sig(wordCount, 35, 25);
+  const depthScore = sig(wordCount, 20, 15);
   const techKeywords = [
     "algorithm", "complexity", "architecture", "scalability", "latency",
     "throughput", "trade-off", "tradeoff", "distributed", "consistency",
     "availability", "partition", "database", "cache", "api", "microservice",
     "kubernetes", "docker", "ci/cd", "pipeline", "deployed", "implemented",
     "optimized", "refactored", "async", "concurrent", "thread", "memory",
-    "time complexity", "space complexity", "o(n"
+    "time complexity", "space complexity", "o(n",
+    "race condition", "idempotent", "inconsistency", "ingestion", "validation gates",
+    "feature engineering", "scraping", "bottleneck", "deadlock", "idempotency",
+    "eventual consistency", "acid", "normalization", "indexing", "sharding",
+    "load balancer", "replication", "failover", "consensus", "raft", "paxos"
   ];
   const techHits = techKeywords.filter(k => lower.includes(k)).length;
-  const techScore = sig(techHits, 1.5, 1.5);
+  const techScore = sig(techHits, 1.2, 1.2);
 
   const specificityMarkers = [
     "specifically", "for example", "for instance", "such as", "in particular",
     "we used", "i built", "i led", "i reduced", "i increased", "resulted in",
-    "percent", "%", "ms", "seconds", "million", "thousand", "users"
+    "percent", "%", "ms", "seconds", "million", "thousand", "users",
+    "enforcing", "tackle", "separation", "gate", "logic"
   ];
   const numberHits = (text.match(/\b\d+(\.\d+)?[kmb%]?\b/gi) || []).length;
   const specificityHits = specificityMarkers.filter(m => lower.includes(m)).length + numberHits;
-  const specificityScore = sig(specificityHits, 1, 1.2);
+  const specificityScore = sig(specificityHits, 1, 1.0);
 
-  const structureScore = sig(sentenceCount, 2, 1);
+  const structureScore = sig(sentenceCount, 1.5, 0.8);
 
   const fillers = ["um", "uh", "like", "you know", "basically", "kind of", "sort of", "i mean"];
   const fillerCount = fillers.filter(f => lower.includes(f)).length;
   const fillerDensity = fillerCount / Math.max(1, wordCount / 10);
-  const fillerPenalty = Math.tanh(fillerDensity * 3);
+  const fillerPenalty = Math.tanh(fillerDensity * 2.5);
 
   const raw = (
-    depthScore * 0.35 +
-    techScore * 0.30 +
-    specificityScore * 0.20 +
+    depthScore * 0.25 +
+    techScore * 0.45 +      // Increased weight for technical depth
+    specificityScore * 0.15 +
     structureScore * 0.15
-  ) - fillerPenalty * 0.5;
+  ) - fillerPenalty * 0.3;
 
   return Math.max(-1, Math.min(1, raw));
 }
@@ -201,6 +251,7 @@ function AvatarPanel({
   interviewerModel: string;
   interviewerName: string;
 }) {
+
   return (
     <div style={{ position: "relative", width: "100%", flex: 1, background: "linear-gradient(135deg, #050508 0%, #0a0a0f 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(202,255,0,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(202,255,0,0.02) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
@@ -369,34 +420,7 @@ function CameraPanel({
         </button>
       </div>
 
-      {/* ── LIVE DATA HUD ── */}
-      {cameraOn && isReady && (
-        <div style={{ position: "absolute", top: "1rem", left: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", pointerEvents: "none" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", padding: "0.4rem 0.75rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", width: "55px" }}>GAZE</span>
-            <div style={{ width: "60px", height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
-              <div style={{ width: `${gazeScore}%`, height: "100%", background: gazeScore > 70 ? "#00e096" : "#ffcc00", transition: "width 0.3s ease, background 0.3s ease" }} />
-            </div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "#fff", fontWeight: 700, width: "25px", textAlign: "right" }}>{gazeScore}</span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", padding: "0.4rem 0.75rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", width: "55px" }}>CONF.</span>
-            <div style={{ width: "60px", height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
-              <div style={{ width: `${confidence}%`, height: "100%", background: confidence > 70 ? "#00e5ff" : "#ff8800", transition: "width 0.3s ease, background 0.3s ease" }} />
-            </div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "#fff", fontWeight: 700, width: "25px", textAlign: "right" }}>{confidence}</span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", padding: "0.4rem 0.75rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", width: "55px" }}>FIDGET</span>
-            <div style={{ width: "60px", height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
-              <div style={{ width: `${fidget}%`, height: "100%", background: fidget < 40 ? "#caff00" : "#ff4d6d", transition: "width 0.3s ease, background 0.3s ease" }} />
-            </div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "#fff", fontWeight: 700, width: "25px", textAlign: "right" }}>{fidget}</span>
-          </div>
-        </div>
-      )}
+      {/* ── LIVE DATA HUD (MOVED) ── */}
     </div>
   );
 }
@@ -545,11 +569,13 @@ export default function InterviewPage() {
     updateLastTranscriptText,
     liveAlert, setLiveAlert,
     startInterview,
-    sessionId, resumeText, jobText, interviewerPersona, interviewerModel,
-    pressureScore, updatePressureScore, pressureTrend, updateEloScore
+    sessionId, resumeText, jobText, interviewerPersona, interviewerModel, interviewerVoice,
+    pressureScore, updatePressureScore, pressureTrend, updateEloScore,
+    userId, role, company, biometrics, interviewers, addSkippedQuestion, skippedQuestions, interviewStartTime
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
   const [gazeScore, setGazeScore] = useState(88);
   const [confidence, setConfidence] = useState(82);
   const [fidget, setFidget] = useState(12);
@@ -584,7 +610,7 @@ export default function InterviewPage() {
 
   // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
   // ─── PIPELINE: Handle Chat Stream ──────────────────────────────────────────
-  const handleChatStream = async (inputText: string) => {
+  const handleChatStream = async (inputText: string, ignoreScore: boolean = false) => {
     if (!sessionId) return;
 
     try {
@@ -669,7 +695,6 @@ export default function InterviewPage() {
                 sentenceBuffer = ""; // Reset buffer for next sentence
 
                 setIsSpeaking(true);
-
                 // Only add if we are still in the same turn
                 if (turnId === currentTurnIdRef.current && audioQueueRef.current) {
                   audioQueueRef.current.add(fragmentForTTS);
@@ -680,10 +705,11 @@ export default function InterviewPage() {
             } else if (data.done) {
               setQuestionIndex(data.next_index);
 
-              // Only update score if not a "safe skip"
-              if (!data.skip_scoring) {
+              // Trigger ELO update with the score A returned by the LLM
+              if (!data.skip_scoring && data.quality_score !== undefined && !ignoreScore) {
+                console.log(`[ELO_DEBUG] Received quality_score: ${data.quality_score}`);
                 updateEloScore(data.quality_score);
-              } else {
+              } else if (data.skip_scoring) {
                 console.log("[DEBUG] Safe Skip: ELO update bypassed.");
               }
 
@@ -702,17 +728,9 @@ export default function InterviewPage() {
       // Final tail fragment if it didn't end with punctuation
       if (sentenceBuffer.trim().length > 0) {
         const fragmentForTTS = sentenceBuffer.trim();
-        setIsSpeaking(true);
-        if (turnId === currentTurnIdRef.current && audioQueueRef.current) {
+        if (audioQueueRef.current) {
           audioQueueRef.current.add(fragmentForTTS);
-        } else {
-          console.log(`[DEBUG] Ignoring stale final TTS fragment`);
         }
-      }
-
-      // Safety net to ensure the stream completes if the response was very small
-      if (audioQueueRef.current && turnId === currentTurnIdRef.current) {
-        audioQueueRef.current.signalEndTurn();
       }
 
     } catch (err) {
@@ -1047,10 +1065,6 @@ export default function InterviewPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       (window as any).debugSpeak = (text: string) => {
-        if (!audioQueueRef.current) {
-          audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
-        }
-        setIsSpeaking(true);
         if (audioQueueRef.current) {
           audioQueueRef.current.add(text);
         }
@@ -1070,32 +1084,22 @@ export default function InterviewPage() {
       isIntroTriggeredRef.current = true;
 
       const firstText = transcript[0].text;
-      setIsSpeaking(true);
-      if (!audioQueueRef.current) {
-        audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+      if (firstText) {
+        if (!audioQueueRef.current) {
+          audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+        }
+        setIsSpeaking(true);
+        fetch('http://127.0.0.1:8080/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: firstText }),
+        }).then(r => r.blob()).then(blob => {
+          if (audioQueueRef.current) {
+            audioQueueRef.current.add(firstText);
+          }
+        });
       }
-      audioQueueRef.current.add(firstText);
-      audioQueueRef.current.signalEndTurn();
-
-      return;
     }
-
-    // Fallback if transcript is empty (direct navigation or refresh)
-    if (sessionId && !isIntroTriggeredRef.current && transcript.length === 0) {
-      console.log("[DEBUG] Manual trigger for AI intro...");
-      isIntroTriggeredRef.current = true;
-      setIsProcessing(true);
-      handleChatStream("").finally(() => {
-        setIsProcessing(false);
-      });
-    }
-  }, [sessionId, transcript.length, isReady]);
-
-  // ── Timer Logic ───────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isReady) return;
-    const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
-    return () => clearInterval(interval);
   }, [isReady]);
 
   // ── Auto-scroll transcript ────────────────────────────────────────────────
@@ -1117,15 +1121,94 @@ export default function InterviewPage() {
   // Removed Mock Logic
 
   // ── Finish ────────────────────────────────────────────────────────────────
-  const handleFinish = () => {
+  const handleFinish = async () => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     dcRef.current?.close();
     pcRef.current?.close();
     finishInterview();
+
+    // Auto-save session if user is logged in
+    if (userId && sessionId) {
+      try {
+        const avgGaze = biometrics.length > 0 ? Math.round(biometrics.reduce((s: number, d: any) => s + (d.gazeScore || 0), 0) / biometrics.length) : 0;
+        const avgConf = biometrics.length > 0 ? Math.round(biometrics.reduce((s: number, d: any) => s + (d.confidence || 0), 0) / biometrics.length) : 0;
+        const avgCalm = biometrics.length > 0 ? Math.round(100 - biometrics.reduce((s: number, d: any) => s + (d.fidgetIndex || 0), 0) / biometrics.length) : 100;
+        const spikeCount = biometrics.filter(d => d.stressSpike).length;
+
+        await fetch("http://127.0.0.1:8080/api/save-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: sessionId,
+            user_id: userId,
+            role: role,
+            company: company,
+            score: Math.round(pressureScore),
+            gaze: avgGaze,
+            confidence: avgConf,
+            composure: avgCalm,
+            spikes: spikeCount,
+            date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          }),
+        });
+        console.log("[DEBUG] Session auto-saved successfully.");
+      } catch (err) {
+        console.error("[DEBUG] Session auto-save failed:", err);
+      }
+    }
+
     setTimeout(() => {
-      setPhase("report");
+      setPhase("finished");
       router.push(`/report?session_id=${sessionId}`);
     }, 2000);
+  };
+
+  const handleSkipQuestion = () => {
+    // 1. Find the last question asked by the interviewer
+    const lastQuestion = [...transcript].reverse().find(e => e.speaker === 'interviewer');
+    if (lastQuestion && sessionId) {
+      addSkippedQuestion(lastQuestion.text);
+      console.log(`[DEBUG] Skipped question: "${lastQuestion.text}"`);
+
+      // Persist skip to backend so AI can analyze it in the report
+      fetch("http://127.0.0.1:8080/api/log-skip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          question: lastQuestion.text,
+          timestamp_sec: (Date.now() - (interviewStartTime || Date.now())) / 1000
+        }),
+      }).catch(err => console.error("[DEBUG] Failed to log skip to backend:", err));
+    }
+
+    // 2. Stop any active recording/TTS without triggering processTurn
+    if (isRecording) {
+      if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
+        audioRecorderRef.current.onstop = null;
+        audioRecorderRef.current.stop();
+      }
+      if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+        videoRecorderRef.current.onstop = null;
+        videoRecorderRef.current.stop();
+      }
+      audioRecorderRef.current = null;
+      videoRecorderRef.current = null;
+      audioChunksRef.current = [];
+      videoChunksRef.current = [];
+      setIsRecording(false);
+    }
+    if (audioQueueRef.current) {
+      audioQueueRef.current.stop();
+    }
+
+    // 3. Trigger a new question from the AI directly
+    const systemPrompt = "[SYSTEM: The user has skipped this question. Please pivot and ask a different, relevant interview question instead.]";
+    handleChatStream(systemPrompt, true);
+
+    // Add a local notification
+    setLiveAlert("Question Skipped. AI is pivoting...");
+    setTimeout(() => setLiveAlert(null), 3000);
   };
 
   const formatTime = (s: number) => {
@@ -1162,9 +1245,30 @@ export default function InterviewPage() {
         <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.5rem", fontWeight: 500, letterSpacing: "0.05em", color: isReady ? "var(--text)" : "var(--muted)", transition: "color 0.3s ease" }}>
           {isReady ? formatTime(elapsedSeconds) : "--:--"}
         </div>
-        <button className="btn-danger" onClick={handleFinish} style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
-          End Interview
-        </button>
+        <div style={{ display: "flex", gap: "0.75rem" }}>
+          {isReady && (
+            <button
+              onClick={handleSkipQuestion}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
+                padding: "0.5rem 1.25rem",
+                fontSize: "0.8rem",
+                borderRadius: "4px",
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            >
+              Skip Question
+            </button>
+          )}
+          <button className="btn-danger" onClick={handleFinish} style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
+            End Interview
+          </button>
+        </div>
       </header>
 
       {/* ── MAIN CONTENT ── */}
@@ -1183,7 +1287,7 @@ export default function InterviewPage() {
               pressureScore={pressureScore}
               pressureTrend={pressureTrend}
               interviewerModel={interviewerModel || "/models/business_girl.glb"}
-              interviewerName={INTERVIEWERS.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer"}
+              interviewerName={interviewers.find((i: any) => i.id === interviewerPersona)?.name || "Technical Interviewer"}
             />
           </div>
           <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>

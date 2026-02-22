@@ -1,7 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useInterviewStore } from "@/store/useInterviewStore";
+
 import Link from "next/link";
 
 const DIFFICULTY_MAP: Record<string, number> = {
@@ -20,18 +22,32 @@ const SECTORS = [
     { id: "industrial", name: "Industrial / Real Economy", icon: "🏗️", desc: "Manufacturing, energy, transportation, construction, agriculture, utilities.", color: "#4db6ac" },
 ];
 
-import { INTERVIEWERS } from "@/types/interviewer";
+import { Interviewer } from "@/types/interviewer";
+
 
 export default function InterviewerSelectionPage() {
     const router = useRouter();
-    const { setInterviewerPersona, setInterviewerModel, interviewerPersona, setRole, setCompany } = useInterviewStore();
+    const { setInterviewerPersona, setInterviewerModel, setInterviewerVoice, interviewerPersona, setRole, setCompany, interviewers, setInterviewers } = useInterviewStore();
     const [selectedSector, setSelectedSector] = useState<string | null>(null);
     const [hovered, setHovered] = useState<string | null>(null);
     const [expandedDifficulty, setExpandedDifficulty] = useState<string | null>("Easy");
 
-    const handleSelect = (inter: typeof INTERVIEWERS[0]) => {
+    useEffect(() => {
+        if (interviewers.length === 0) {
+            fetch("http://127.0.0.1:8080/api/interviewers")
+                .then(res => res.json())
+                .then(data => {
+                    if (data.interviewers) setInterviewers(data.interviewers);
+                })
+                .catch(err => console.error("Failed to fetch interviewers:", err));
+        }
+    }, [interviewers.length, setInterviewers]);
+
+    const handleSelect = (inter: Interviewer) => {
+
         setInterviewerPersona(inter.id);
         setInterviewerModel(inter.model);
+        setInterviewerVoice(inter.voice);
         setRole(inter.role);
         const sectorName = SECTORS.find(s => s.id === selectedSector)?.name || "AceIt";
         setCompany(sectorName);
@@ -39,7 +55,7 @@ export default function InterviewerSelectionPage() {
     };
 
     const filteredInterviewers = selectedSector
-        ? INTERVIEWERS.filter((i) => i.sector === selectedSector)
+        ? interviewers.filter((i) => i.sector === selectedSector)
         : [];
 
     const groupedInterviewers = filteredInterviewers.reduce((acc, inter) => {
@@ -47,7 +63,8 @@ export default function InterviewerSelectionPage() {
         if (!acc[diff]) acc[diff] = [];
         acc[diff].push(inter);
         return acc;
-    }, {} as Record<string, typeof INTERVIEWERS[0][]>);
+    }, {} as Record<string, Interviewer[]>);
+
 
     const sortedDifficulties = Object.keys(groupedInterviewers).sort(
         (a, b) => (DIFFICULTY_MAP[a] || 0) - (DIFFICULTY_MAP[b] || 0)
