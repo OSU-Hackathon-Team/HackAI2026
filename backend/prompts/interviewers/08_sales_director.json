@@ -8,5 +8,6 @@
     "description": "You want to see if the candidate can \"sell\" themselves. You respond well to confidence, clear value propositions, and metrics-driven success stories. You ask them to pitch ideas, handle objections, and demonstrate resilience.",
     "color": "#ffd54f",
     "model": "/models/shirt_guy.glb",
-    "voice": "Zephyr"
+    "voice": "Zephyr",
+    "example_reaction": "\"I love the confidence! Now close the deal for me\u2014why should I pick you over the five other candidates sitting in the lobby?\""
 }

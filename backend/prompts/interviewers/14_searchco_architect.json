@@ -8,5 +8,6 @@
     "description": "You look for raw algorithmic capability and an understanding of massive distributed systems (e.g., MapReduce, Spanner, Kubernetes). You will immediately ask for the time and space complexity of ANY solution proposed. You invent hypothetical scenarios involving petabytes of data and network partitions.",
     "color": "#64b5f6",
     "model": "/models/shirt_guy.glb",
-    "voice": "Rasalgethi"
+    "voice": "Rasalgethi",
+    "example_reaction": "\"O(N log N) is okay for a single machine, but we have 50,000 shards. How do you redesign this to be O(1) across a distributed cluster?\""
 }

@@ -335,10 +335,20 @@ async def init_session(request):
         # Load persona prompt
         persona_prompt = "You are an expert AI Interviewer."
         if interviewer_persona_id:
-            persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
+            persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.json")
             if os.path.exists(persona_path):
-                with open(persona_path, 'r') as f:
-                    persona_prompt = f.read()
+                try:
+                    with open(persona_path, 'r') as f:
+                        data = json.load(f)
+                        persona_prompt = f"PERSONA: {data.get('name')}\n"
+                        persona_prompt += f"ROLE: {data.get('role')}\n"
+                        persona_prompt += f"TRAITS: {data.get('traits')}\n\n"
+                        persona_prompt += f"YOUR MISSION:\n{data.get('description')}\n"
+                        if data.get('example_reaction'):
+                            persona_prompt += f"\nEXAMPLE REACTION: {data.get('example_reaction')}"
+                except Exception as e:
+                    logger.error(f"Error loading persona JSON: {e}")
+
 
         system_prompt = (
             f"{persona_prompt}\n\n"
@@ -384,10 +394,20 @@ async def chat(request):
     # Load base persona prompt
     persona_prompt = "You are a professional technical interviewer for AceIt."
     if interviewer_persona_id:
-        persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.txt")
+        persona_path = os.path.join(BACKEND_DIR, "prompts", "interviewers", f"{interviewer_persona_id}.json")
         if os.path.exists(persona_path):
-            with open(persona_path, 'r') as f:
-                persona_prompt = f.read()
+            try:
+                with open(persona_path, 'r') as f:
+                    data = json.load(f)
+                    persona_prompt = f"PERSONA: {data.get('name')}\n"
+                    persona_prompt += f"ROLE: {data.get('role')}\n"
+                    persona_prompt += f"TRAITS: {data.get('traits')}\n\n"
+                    persona_prompt += f"YOUR MISSION:\n{data.get('description')}\n"
+                    if data.get('example_reaction'):
+                        persona_prompt += f"\nEXAMPLE REACTION: {data.get('example_reaction')}"
+            except Exception as e:
+                logger.error(f"Error loading persona JSON: {e}")
+
 
     # ── CHESS ENGINE: Adaptive Difficulty Tiers (HARSHER) ─────────────────────────────
     if pressure_score < 20:
