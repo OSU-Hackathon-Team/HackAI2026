@@ -1,9 +1,11 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
 import dynamic from "next/dynamic";
 import { AvatarHandle } from "@/components/Avatar";
+import { PythonProvider, usePython } from "react-py";
+import { CodeEditor, ConsoleOutput } from "@/components/CodeEditor";
 
 
 const Avatar = dynamic(() => import("@/components/Avatar"), { ssr: false });
@@ -470,57 +472,115 @@ function ConnectionBadge({ status }: { status: "connecting" | "connected" | "fai
 
 // ─── AUDIO QUEUE HELPER ──────────────────────────────────────────────────────
 class AudioQueue {
-  private queue: { url: string; text: string }[] = [];
+  private queue: { text: string }[] = [];
   public isPlaying = false;
   private onEnd: () => void;
   private avatarRef: React.RefObject<AvatarHandle | null>;
+  private isStreamStarted = false;
+  private turnEnded = false;
+  private expectedEndTime = 0;
+  private isFinishing = false;
 
   constructor(onEnd: () => void, avatarRef: React.RefObject<AvatarHandle | null>) {
     this.onEnd = onEnd;
     this.avatarRef = avatarRef;
   }
 
-  add(url: string, text: string) {
-    this.queue.push({ url, text });
+  add(text: string) {
+    this.queue.push({ text });
     if (!this.isPlaying) this.playNext();
   }
 
-  private async playNext() {
-    if (this.queue.length === 0) {
+  signalEndTurn() {
+    if (this.turnEnded) return; // Prevent double firing
+    this.turnEnded = true;
+    if (!this.isPlaying && this.queue.length === 0) {
       this.isPlaying = false;
-      this.onEnd();
-      return;
-    }
-    this.isPlaying = true;
-    const item = this.queue.shift();
-    if (item && this.avatarRef.current) {
-      // Use TalkingHead's speak method
-      await this.avatarRef.current.speak(item.url, item.text);
-      // The actual end of playback should be signaled by TalkingHead, 
-      // but TalkingHead's onEnd is passed to speakText.
-      // So TalkingHead will call this.onEnd when it's done.
-    } else {
-      // Fallback or skip
-      this.playNext();
+      this.finishStream();
     }
   }
 
-  // TalkingHead will signal end, so we need a way to trigger playNext
-  signalEnd() {
-    this.playNext();
+  private async finishStream() {
+    if (this.isFinishing) return;
+    this.isFinishing = true;
+
+    if (!this.isStreamStarted) {
+      this.onEnd();
+      this.turnEnded = false;
+      this.isFinishing = false;
+      return;
+    }
+
+    const waitTime = this.expectedEndTime - Date.now() + 500;
+    if (waitTime > 0) {
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+
+    if (this.avatarRef?.current) {
+      this.avatarRef.current.endStream();
+      this.isStreamStarted = false;
+    }
+    this.onEnd();
+    this.turnEnded = false;
+    this.isFinishing = false;
+  }
+
+  private async playNext() {
+    if (!this.queue || this.queue.length === 0) {
+      if (this.turnEnded && this.isPlaying) {
+        this.isPlaying = false;
+        await this.finishStream();
+      } else {
+        this.isPlaying = false;
+      }
+      return;
+    }
+
+    let attempts = 0;
+    while ((!this.avatarRef?.current || !this.avatarRef.current.isLoaded) && attempts < 100) {
+      if (attempts % 10 === 0) console.log("[AudioQueue] ⏳ Waiting for avatar to fully load...");
+      await new Promise(r => setTimeout(r, 100));
+      attempts++;
+    }
+
+    const item = this.queue.shift();
+    if (item && this.avatarRef?.current) {
+      this.isPlaying = true;
+      try {
+        if (!this.isStreamStarted) {
+          await this.avatarRef.current.startStream();
+          this.isStreamStarted = true;
+          this.expectedEndTime = Date.now();
+        }
+        const durationMs = await this.avatarRef.current.appendStream(item.text) || 0;
+        this.expectedEndTime = Math.max(this.expectedEndTime, Date.now()) + durationMs;
+      } catch (e) {
+        console.error("[AudioQueue] Stream request failed:", e);
+      }
+      // Immediately request the next chunk to pre-fetch downloading
+      this.playNext();
+    } else {
+      console.warn("[AudioQueue] ✗ Skipping fragment: Avatar not found after wait.");
+      this.isPlaying = false;
+      this.playNext();
+    }
   }
 
   stop() {
     this.queue = [];
     this.isPlaying = false;
-    if (this.avatarRef.current) {
+    this.turnEnded = false;
+    this.expectedEndTime = 0;
+    if (this.isStreamStarted && this.avatarRef?.current) {
       this.avatarRef.current.stop();
+      this.isStreamStarted = false;
     }
   }
 }
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
-export default function InterviewPage() {
+// ─── INTERVIEW CONTENT ────────────────────────────────────────────────────────
+function InterviewContent() {
   const router = useRouter();
   const {
     phase, setPhase, finishInterview,
@@ -549,6 +609,24 @@ export default function InterviewPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [questionIndex, setQuestionIndex] = useState(0);
+  const [isCodingPhase, setIsCodingPhase] = useState(false);
+  const [code, setCode] = useState("# Live Coding Challenge\n# Write your solution here\n\n");
+
+  const {
+    runPython,
+    stdout,
+    stderr,
+    isLoading,
+    isRunning,
+    isAwaitingInput,
+    prompt: pythonPrompt,
+    sendInput,
+    interruptExecution
+  } = usePython({
+    packages: {
+      official: ["pyodide-http"]
+    }
+  });
 
   const avatarRef = useRef<AvatarHandle | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
@@ -565,13 +643,25 @@ export default function InterviewPage() {
 
   const audioQueueRef = useRef<AudioQueue | null>(null);
   const isIntroTriggeredRef = useRef(false);
+  const currentTurnIdRef = useRef(0);
+
 
   // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
   // ─── PIPELINE: Handle Chat Stream ──────────────────────────────────────────
-  const handleChatStream = async (inputText: string, ignoreScore: boolean = false) => {
+  const handleChatStream = async (inputText: string, ignoreScore: boolean = false, forceCoding: boolean = false) => {
     if (!sessionId) return;
 
+    // Stop any current audio and increment turn ID
+    if (audioQueueRef.current) audioQueueRef.current.stop();
+    avatarRef.current?.stop();
+    const turnId = ++currentTurnIdRef.current;
+
     try {
+      // Ensure AudioQueue is initialized so we don't blink/miss first fragment
+      if (!audioQueueRef.current) {
+        audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+      }
+
       // Chat for next question (STREAMING), pass current pressure score
       const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
         method: 'POST',
@@ -585,7 +675,10 @@ export default function InterviewPage() {
           job_text: jobText,
           interviewer_persona: interviewerPersona,
           pressure_score: pressureScore,
-          pressure_trend: pressureTrend
+          pressure_trend: pressureTrend,
+          history: transcript, // Pass full transcript for context
+          code: code,
+          force_coding: forceCoding
         }),
       });
 
@@ -636,40 +729,35 @@ export default function InterviewPage() {
               updateLastTranscriptText(fullSentence);
 
               // ── TTS SENTENCE BREAK DETECTION ─────────────────────────────────────
-              if (/[.!?]$/.test(sentenceBuffer.trim())) {
+              // Chunk by commas and punctuation if length is > 15 to minimize API wait time
+              if (/[,.!?;\n:]$/.test(sentenceBuffer.trim()) && sentenceBuffer.trim().length > 15) {
                 const fragmentForTTS = sentenceBuffer.trim();
                 sentenceBuffer = ""; // Reset buffer for next sentence
 
                 setIsSpeaking(true);
-                fetch('http://127.0.0.1:8080/api/tts', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ text: fragmentForTTS, voice: interviewerVoice }),
-                })
-                  .then(r => {
-                    if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
-                    return r.blob();
-                  })
-                  .then(blob => {
-                    if (audioQueueRef.current) {
-                      audioQueueRef.current.add(URL.createObjectURL(blob), fragmentForTTS);
-                    }
-                  })
-                  .catch(err => {
-                    console.error("TTS Fetch Error:", err);
-                    // If TTS fails, we should at least not stay "Speaking" forever if queue is empty
-                    if (audioQueueRef.current && !audioQueueRef.current.isPlaying) {
-                      setIsSpeaking(false);
-                    }
-                  });
+                // Only add if we are still in the same turn
+                if (turnId === currentTurnIdRef.current && audioQueueRef.current) {
+                  audioQueueRef.current.add(fragmentForTTS);
+                } else {
+                  console.log(`[DEBUG] Ignoring stale TTS fragment (Turn ${turnId} vs ${currentTurnIdRef.current})`);
+                }
               }
             } else if (data.done) {
               setQuestionIndex(data.next_index);
+              if (data.is_coding_phase !== undefined) {
+                setIsCodingPhase(data.is_coding_phase);
+              }
 
               // Trigger ELO update with the score A returned by the LLM
-              if (data.quality_score !== undefined && !ignoreScore) {
+              if (!data.skip_scoring && data.quality_score !== undefined && !ignoreScore) {
                 console.log(`[ELO_DEBUG] Received quality_score: ${data.quality_score}`);
                 updateEloScore(data.quality_score);
+              } else if (data.skip_scoring) {
+                console.log("[DEBUG] Safe Skip: ELO update bypassed.");
+              }
+
+              if (audioQueueRef.current && turnId === currentTurnIdRef.current) {
+                audioQueueRef.current.signalEndTurn();
               }
 
               if (data.is_finished) {
@@ -683,31 +771,18 @@ export default function InterviewPage() {
       // Final tail fragment if it didn't end with punctuation
       if (sentenceBuffer.trim().length > 0) {
         const fragmentForTTS = sentenceBuffer.trim();
-        fetch('http://127.0.0.1:8080/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: fragmentForTTS, voice: interviewerVoice }),
-        })
-          .then(r => {
-            if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
-            return r.blob();
-          })
-          .then(blob => {
-            if (audioQueueRef.current) {
-              audioQueueRef.current.add(URL.createObjectURL(blob), fragmentForTTS);
-            }
-          })
-          .catch(err => {
-            console.error("TTS Fetch Error (final fragment):", err);
-            if (audioQueueRef.current && !audioQueueRef.current.isPlaying) {
-              setIsSpeaking(false);
-            }
-          });
+        if (audioQueueRef.current) {
+          audioQueueRef.current.add(fragmentForTTS);
+        }
       }
 
     } catch (err) {
       console.error("Chat stream handling failed:", err);
       setLiveAlert("AI response failed. Please try recording again.");
+    } finally {
+      if (audioQueueRef.current && turnId === currentTurnIdRef.current) {
+        audioQueueRef.current.signalEndTurn();
+      }
     }
   };
 
@@ -851,6 +926,7 @@ export default function InterviewPage() {
   // ── Start timer + interview when user is ready ─────────────
   const handleStartInterviewCountdown = () => {
     if (countdown !== null) return;
+
     setCountdown(3);
     let current = 3;
     const ticker = setInterval(() => {
@@ -1025,10 +1101,12 @@ export default function InterviewPage() {
     }
   };
 
-  // ── Countdown logic is now handled by handleStartInterviewCountdown ─────────
+  // ── Timer + Phase Logic ──────────────────────────────────────────────────
   useEffect(() => {
-    // Removed automatic countdown on phase change
-  }, [phase]);
+    if (!isReady) return;
+    const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isReady]);
 
   useEffect(() => { if (phase === "live") setIsReady(true); }, [phase]);
 
@@ -1036,61 +1114,34 @@ export default function InterviewPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       (window as any).debugSpeak = (text: string) => {
-        if (!audioQueueRef.current) {
-          audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+        if (audioQueueRef.current) {
+          audioQueueRef.current.add(text);
         }
-        setIsSpeaking(true);
-        fetch('http://127.0.0.1:8080/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, voice: interviewerVoice }),
-        }).then(r => r.blob()).then(blob => {
-          if (audioQueueRef.current) {
-            audioQueueRef.current.add(URL.createObjectURL(blob), text);
-          }
-        }).catch(err => {
-          console.error("Debug speak failed:", err);
-          setIsSpeaking(false);
-        });
       };
     }
   }, [avatarRef, setIsSpeaking]);
 
 
-  // ── Timer — only runs once isReady is true ────────────────────────────────
+  // ── AI Intro Logic ────────────────────────────────────────────────────────
   useEffect(() => {
+    // Only trigger the intro once the interview is fully live and ready
     if (!isReady) return;
-    const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
 
-    // If transcript is empty, trigger the intro
-    if (transcript.length === 0 && !isIntroTriggeredRef.current) {
-      console.log("[DEBUG] Triggering AI intro...");
+    // If we already have a transcript (from upload page), just trigger TTS for it
+    if (transcript.length > 0 && transcript[0].speaker === "interviewer" && !isIntroTriggeredRef.current) {
+      console.log("[DEBUG] First question already present, triggering TTS...");
       isIntroTriggeredRef.current = true;
-      setIsProcessing(true);
-      handleChatStream("").finally(() => {
-        setIsProcessing(false);
-      });
-    } else if (transcript.length === 1 && transcript[0].speaker === "interviewer") {
-      // Legacy support or if intro was partially handled
+
       const firstText = transcript[0].text;
       if (firstText) {
         if (!audioQueueRef.current) {
           audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
         }
         setIsSpeaking(true);
-        fetch('http://127.0.0.1:8080/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: firstText, voice: interviewerVoice }),
-        }).then(r => r.blob()).then(blob => {
-          if (audioQueueRef.current) {
-            audioQueueRef.current.add(URL.createObjectURL(blob), firstText);
-          }
-        });
+        audioQueueRef.current.add(firstText);
+        audioQueueRef.current.signalEndTurn();
       }
     }
-
-    return () => clearInterval(interval);
   }, [isReady]);
 
   // ── Auto-scroll transcript ────────────────────────────────────────────────
@@ -1154,7 +1205,7 @@ export default function InterviewPage() {
     }, 2000);
   };
 
-  const handleSkipQuestion = () => {
+  const handleSkipQuestion = async () => {
     // 1. Find the last question asked by the interviewer
     const lastQuestion = [...transcript].reverse().find(e => e.speaker === 'interviewer');
     if (lastQuestion && sessionId) {
@@ -1194,15 +1245,20 @@ export default function InterviewPage() {
     }
 
     // 3. Trigger a new question from the AI directly
-    const systemPrompt = "[SYSTEM: The user has skipped this question. Please pivot and ask a different, relevant interview question instead.]";
-    handleChatStream(systemPrompt, true);
+    setIsProcessing(true);
+    try {
+      const systemPrompt = "[SYSTEM: The user has skipped this question. Please pivot and ask a different, relevant interview question instead.]";
+      await handleChatStream(systemPrompt, true);
+    } finally {
+      setIsProcessing(false);
+    }
 
     // Add a local notification
     setLiveAlert("Question Skipped. AI is pivoting...");
     setTimeout(() => setLiveAlert(null), 3000);
   };
 
-  const handleMakeEasier = () => {
+  const handleMakeEasier = async () => {
     // 1. Stop any active recording/TTS
     if (isRecording) {
       if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
@@ -1233,10 +1289,65 @@ export default function InterviewPage() {
 
     const systemPrompt = `[SYSTEM: The candidate has requested that the current question be made easier. Please regenerate the current question (or a very similar one) with a ${degree}. Do not apologize, just serve the easier question.]`;
 
-    handleChatStream(systemPrompt, true);
+    setIsProcessing(true);
+    try {
+      await handleChatStream(systemPrompt, true);
+    } finally {
+      setIsProcessing(false);
+    }
 
     // Add a local notification
     setLiveAlert("Simplifying question...");
+    setTimeout(() => setLiveAlert(null), 3000);
+  };
+
+  const handleSkipToCoding = async () => {
+    // 1. Log skip if there was a question
+    const lastQuestion = [...transcript].reverse().find(e => e.speaker === 'interviewer');
+    if (lastQuestion && sessionId) {
+      addSkippedQuestion(lastQuestion.text);
+      fetch("http://127.0.0.1:8080/api/log-skip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: sessionId,
+          question: lastQuestion.text,
+          timestamp_sec: (Date.now() - (interviewStartTime || Date.now())) / 1000
+        }),
+      }).catch(err => console.error("[DEBUG] Failed to log skip to backend:", err));
+    }
+
+    // 2. Stop recordings/TTS
+    if (isRecording) {
+      if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
+        audioRecorderRef.current.onstop = null;
+        audioRecorderRef.current.stop();
+      }
+      if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+        videoRecorderRef.current.onstop = null;
+        videoRecorderRef.current.stop();
+      }
+      audioRecorderRef.current = null;
+      videoRecorderRef.current = null;
+      audioChunksRef.current = [];
+      videoChunksRef.current = [];
+      setIsRecording(false);
+    }
+    if (audioQueueRef.current) audioQueueRef.current.stop();
+
+    // 3. Force state change and notify AI
+    setIsCodingPhase(true);
+    setQuestionIndex(3); // Targets the coding trigger in backend
+
+    setIsProcessing(true);
+    try {
+      const codingPrompt = "[SYSTEM: The user has requested to skip directly to the live coding challenge. Please acknowledge this and present a relevant Python programming task based on the job requirements and their background. Start the coding phase now.]";
+      await handleChatStream(codingPrompt, true, true);
+    } finally {
+      setIsProcessing(false);
+    }
+
+    setLiveAlert("Initiating Coding Challenge...");
     setTimeout(() => setLiveAlert(null), 3000);
   };
 
@@ -1313,6 +1424,21 @@ export default function InterviewPage() {
               </button>
             </>
           )}
+          {!isCodingPhase && isReady && (
+            <button
+              onClick={handleSkipToCoding}
+              className="btn-primary"
+              style={{
+                padding: "0.5rem 1.25rem",
+                fontSize: "0.8rem",
+                background: "rgba(202, 255, 0, 0.1)",
+                color: "var(--success)",
+                border: "1px solid rgba(202, 255, 0, 0.2)"
+              }}
+            >
+              Skip to Coding
+            </button>
+          )}
           <button className="btn-danger" onClick={handleFinish} style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
             End Interview
           </button>
@@ -1320,85 +1446,170 @@ export default function InterviewPage() {
       </header>
 
       {/* ── MAIN CONTENT ── */}
-      <main style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "1.5rem", padding: "1.5rem 2rem", overflow: "hidden" }}>
+      <main style={{ display: "grid", gridTemplateColumns: isCodingPhase ? "1.5fr 1fr" : "1fr 340px", gap: "1.5rem", padding: "1.5rem 2rem", overflow: "hidden" }}>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-            <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
-              <AvatarPanel
-                isSpeaking={isSpeaking}
-                isProcessing={isProcessing}
-                avatarRef={avatarRef}
-                onAudioStart={() => setIsSpeaking(true)}
-                onAudioEnd={() => {
-                  // signal next in queue
-                  if (audioQueueRef.current) audioQueueRef.current.signalEnd();
-                }}
-                pressureScore={pressureScore}
-                pressureTrend={pressureTrend}
-                interviewerModel={interviewerModel || "/models/business_girl.glb"}
-                interviewerName={interviewers.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer"}
-              />
-
+        {isCodingPhase ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div className="flex justify-between items-center px-1">
+              <span className="text-zinc-500 text-[10px] font-mono tracking-widest uppercase">Live Coding Challenge</span>
+              <button
+                onClick={() => runPython(code)}
+                disabled={!isReady || isLoading || isRunning}
+                className="btn-primary"
+                style={{ padding: "0.4rem 1rem", fontSize: "0.7rem" }}
+              >
+                RUN_CODE
+              </button>
             </div>
-            <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
-              <CameraPanel
-                videoRef={localVideoRef}
-                cameraOn={cameraOn}
-                micOn={micOn}
-                onToggleCamera={handleToggleCamera}
-                onToggleMic={handleToggleMic}
-                isRecording={isRecording}
-                isProcessing={isProcessing}
-                isSpeaking={isSpeaking}
-                onStartRecording={startRecording}
-                onStopRecording={stopRecording}
-                onStartInterview={handleStartInterviewCountdown}
-                isReady={isReady}
-                countdown={countdown}
-                gazeScore={gazeScore}
-                confidence={confidence}
-                fidget={fidget}
+            <div style={{ flex: 1, minHeight: "400px" }}>
+              <CodeEditor initialValue={code} onChange={setCode} />
+            </div>
+            <div style={{ height: "200px" }}>
+              <ConsoleOutput
+                stdout={stdout}
+                stderr={stderr}
+                isAwaitingInput={isAwaitingInput}
+                prompt={pythonPrompt}
+                onSendInput={sendInput}
+                isRunning={isRunning}
+                onClear={() => { }}
               />
             </div>
           </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+              <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
+                <AvatarPanel
+                  isSpeaking={isSpeaking}
+                  isProcessing={isProcessing}
+                  avatarRef={avatarRef}
+                  onAudioStart={() => setIsSpeaking(true)}
+                  onAudioEnd={() => {
+                    // UI state handled by audioQueue.finishStream() now
+                  }}
+                  pressureScore={pressureScore}
+                  pressureTrend={pressureTrend}
+                  interviewerModel={interviewerModel || "/models/business_girl.glb"}
+                  interviewerName={interviewers.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer"}
+                />
 
-          {/* ── HUD DASHBOARD ── */}
-          <div style={{
-            display: "flex",
-            justifyContent: "space-around",
-            alignItems: "center",
-            background: "rgba(8,11,18,0.4)",
-            backdropFilter: "blur(12px)",
-            borderRadius: "16px",
-            border: "1px solid rgba(255,255,255,0.05)",
-            padding: "1.5rem",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
-          }}>
-            <HUDMetric
-              label="GAZE_STABILITY"
-              value={gazeScore}
-              color={gazeScore > 70 ? "#00e096" : "#ffcc00"}
-              glowColor={gazeScore > 70 ? "rgba(0,224,150,0.4)" : "rgba(255,204,0,0.3)"}
-            />
-            <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
-            <HUDMetric
-              label="NEURAL_CONFIDENCE"
-              value={confidence}
-              color={confidence > 70 ? "#00e5ff" : "#ff8800"}
-              glowColor={confidence > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,136,0,0.3)"}
-            />
-            <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
-            <HUDMetric
-              label="KINETIC_FIDGET"
-              value={fidget}
-              color={fidget < 40 ? "#caff00" : "#ff4d6d"}
-              glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
-            />
+              </div>
+              <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
+                <CameraPanel
+                  videoRef={localVideoRef}
+                  cameraOn={cameraOn}
+                  micOn={micOn}
+                  onToggleCamera={handleToggleCamera}
+                  onToggleMic={handleToggleMic}
+                  isRecording={isRecording}
+                  isProcessing={isProcessing}
+                  isSpeaking={isSpeaking}
+                  onStartRecording={startRecording}
+                  onStopRecording={stopRecording}
+                  onStartInterview={handleStartInterviewCountdown}
+                  isReady={isReady}
+                  countdown={countdown}
+                  gazeScore={gazeScore}
+                  confidence={confidence}
+                  fidget={fidget}
+                />
+              </div>
+            </div>
+
+            {/* ── HUD DASHBOARD ── */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-around",
+              alignItems: "center",
+              background: "rgba(8,11,18,0.4)",
+              backdropFilter: "blur(12px)",
+              borderRadius: "16px",
+              border: "1px solid rgba(255,255,255,0.05)",
+              padding: "1.5rem",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+            }}>
+              <HUDMetric
+                label="GAZE_STABILITY"
+                value={gazeScore}
+                color={gazeScore > 70 ? "#00e096" : "#ffcc00"}
+                glowColor={gazeScore > 70 ? "rgba(0,224,150,0.4)" : "rgba(255,204,0,0.3)"}
+              />
+              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+              <HUDMetric
+                label="NEURAL_CONFIDENCE"
+                value={confidence}
+                color={confidence > 70 ? "#00e5ff" : "#ff8800"}
+                glowColor={confidence > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,136,0,0.3)"}
+              />
+              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+              <HUDMetric
+                label="KINETIC_FIDGET"
+                value={fidget}
+                color={fidget < 40 ? "#caff00" : "#ff4d6d"}
+                glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
+              />
+              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+              <HUDMetric
+                label="PRESSURE_ELO"
+                value={pressureScore}
+                color={getColor(pressureScore)}
+                glowColor={getColor(pressureScore) + "55"} // Dynamic glow matching pressure
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", overflow: "hidden" }}>
+          {isCodingPhase && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", position: "relative" }}>
+                  <AvatarPanel
+                    isSpeaking={isSpeaking}
+                    isProcessing={isProcessing}
+                    avatarRef={avatarRef}
+                    onAudioStart={() => setIsSpeaking(true)}
+                    onAudioEnd={() => {
+                      // UI state handled by audioQueue.finishStream() now
+                    }}
+                    pressureScore={pressureScore}
+                    pressureTrend={pressureTrend}
+                    interviewerModel={interviewerModel || "/models/business_girl.glb"}
+                    interviewerName={interviewers.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer"}
+                  />
+                </div>
+                <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", position: "relative" }}>
+                  <CameraPanel
+                    videoRef={localVideoRef}
+                    cameraOn={cameraOn}
+                    micOn={micOn}
+                    onToggleCamera={handleToggleCamera}
+                    onToggleMic={handleToggleMic}
+                    isRecording={isRecording}
+                    isProcessing={isProcessing}
+                    isSpeaking={isSpeaking}
+                    onStartRecording={startRecording}
+                    onStopRecording={stopRecording}
+                    onStartInterview={handleStartInterviewCountdown}
+                    isReady={isReady}
+                    countdown={countdown}
+                    gazeScore={gazeScore}
+                    confidence={confidence}
+                    fidget={fidget}
+                  />
+                </div>
+              </div>
+              {/* Compact HUD in Coding Phase */}
+              <div style={{ display: "flex", gap: "0.5rem", background: "rgba(0,0,0,0.2)", padding: "0.5rem", borderRadius: "8px" }}>
+                <HUDMetric label="GAZE" value={gazeScore} color="#00e096" glowColor="rgba(0,224,150,0.2)" />
+                <HUDMetric label="CONF" value={confidence} color="#00e5ff" glowColor="rgba(0,229,255,0.2)" />
+                <HUDMetric label="FIDG" value={fidget} color="#caff00" glowColor="rgba(202,255,0,0.2)" />
+                <HUDMetric label="ELO" value={pressureScore} color={getColor(pressureScore)} glowColor={getColor(pressureScore) + "22"} />
+              </div>
+            </>
+          )}
+
           <div className="card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "1rem" }}>
             <div className="label" style={{ marginBottom: "0.75rem" }}>LIVE TRANSCRIPT</div>
             <div ref={transcriptRef} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -1423,5 +1634,15 @@ export default function InterviewPage() {
         </div>
       </main >
     </div >
+  );
+}
+
+export default function InterviewPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black flex items-center justify-center text-[#caff00] font-mono">LOADING INTERVIEW ENVIRONMENT...</div>}>
+      <PythonProvider>
+        <InterviewContent />
+      </PythonProvider>
+    </Suspense>
   );
 }

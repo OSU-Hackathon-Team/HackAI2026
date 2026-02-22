@@ -153,6 +153,13 @@ def extract_video_metrics(video_path):
         logging.error(f"Extract Video Metrics Error: {e}")
         return 0.5, 0.8, 0.1
 
+TECH_ROLES = ["engineer", "developer", "architect", "scientist", "analyst", "devops", "qa", "security", "ml", "software", "programmer"]
+
+def is_tech_job(job_text):
+    if not job_text: return False
+    lower_job = job_text.lower()
+    return any(role in lower_job for role in TECH_ROLES)
+
 print("Defining handlers...")
 
 async def heartbeat(request):
@@ -351,12 +358,25 @@ async def init_session(request):
 
 
         system_prompt = (
+            f"{BASE_PROMPT}\n\n"
+            "--- CURRENT INTERVIEWER PERSONA ---\n"
             f"{persona_prompt}\n\n"
             "Based on the candidate's resume and the job description, "
             "introduce yourself briefly and ask an introductory question about their background. "
             "Keep it professional and concise (under 3 sentences)."
         )
         user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
+        
+        # Immediate generation for first question
+        gemini = get_gemini_client()
+        response = await gemini.aio.models.generate_content(
+            model="models/gemini-3-flash-preview",
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+            )
+        )
+        initial_question = response.text or "Welcome. Tell me about your background."
         
         session_id = f"session-{uuid.uuid4().hex[:8]}"
         
@@ -366,7 +386,8 @@ async def init_session(request):
         return web.json_response({
             "session_id": session_id,
             "resume_text": resume_text,
-            "job_text": job_description
+            "job_text": job_description,
+            "initial_question": initial_question
         })
     except Exception as e:
         import traceback
@@ -387,10 +408,36 @@ async def chat(request):
     job_text = data.get('job_text', '')
     interviewer_persona_id = data.get('interviewer_persona', '')
     pressure_score = data.get('pressure_score', 50)
-    pressure_trend = data.get('pressure_trend', 'stable')  # 'rising' | 'falling' | 'stable'
+    pressure_trend = data.get('pressure_trend', 'stable')
+    history = data.get('history', [])
+    current_code = data.get('code', '')
+
+    # Format history for prompt context
+    history_context = ""
+    if history:
+        history_context = "--- CONVERSATION HISTORY ---\n"
+        for entry in history:
+            speaker = "CANDIDATE" if entry.get('speaker') == 'user' else "INTERVIEWER"
+            history_context += f"{speaker}: {entry.get('text')}\n"
+        history_context += "\n"
 
     print(f"[DEBUG] /api/chat hit! session={session_id}, text='{user_text[:50]}...', index={question_index}")
     
+    is_tech = is_tech_job(job_text)
+    
+    # Coding challenge logic:
+    # Trigger after a few intro/technical questions if tech job.
+    # We'll trigger it around question index 3-4.
+    is_coding_phase = data.get('force_coding', False)
+    if not is_coding_phase and is_tech:
+        # If difficulty is high, maybe show twice. For now, let's target index 3.
+        coding_trigger_indices = [3]
+        if pressure_score > 70:
+            coding_trigger_indices = [3, 5]
+        
+        if question_index in coding_trigger_indices:
+            is_coding_phase = True
+
     # Load base persona prompt
     persona_prompt = "You are a professional technical interviewer for AceIt."
     if interviewer_persona_id:
@@ -454,6 +501,17 @@ async def chat(request):
             "You give zero positive reinforcement. Dismantle their system design ruthlessly."
         )
 
+    # Conversational Mode for Coding Challenge
+    if is_coding_phase:
+        difficulty_mode = (
+            "CONVERSATIONAL MODE: You are guiding the candidate through a live coding challenge in Python. "
+            "You must NOT divulge the solution or write code for them. "
+            "Instead, talk with them to understand their thought process. "
+            "Ask clarifying questions about their approach, edge cases, or complexity. "
+            "Your goal is to evaluate BOTH the end result (code) and their reasoning. "
+            "Be inquisitive but firm. If they struggle, give subtle hints but never the answer."
+        )
+
     # Trend modifier: if score is rising fast, lean harder into the tier
     trend_modifier = ""
     if pressure_trend == "rising":
@@ -465,6 +523,7 @@ async def chat(request):
         f"{BASE_PROMPT}\n\n"
         f"--- CURRENT INTERVIEWER PERSONA ---\n"
         f"{persona_prompt}\n\n"
+        f"{history_context}"
         f"--- ADAPTIVE DIFFICULTY INSTRUCTION ---\n"
         f"{difficulty_mode}{trend_modifier}\n\n"
         "Keep your response under 3 sentences. "
@@ -480,20 +539,41 @@ async def chat(request):
         "- 0.9-1.0: Mastery. Exceptional depth, trade-offs, scalability, and specific advanced technical concepts.\n"
         "\n"
         "At the VERY END of your response, you MUST output a score tag in this EXACT format: [SCORE: 0.95]. "
-        "DO NOT SKIP THIS TAG."
     )
-    # Determine if this is the start of the interview (no user text yet)
-    is_initial = not user_text.strip()
+    if is_coding_phase:
+        system_prompt += (
+            "\n\nLIVE CODING CONTEXT:\n"
+            f"Current Python Code: \n```python\n{current_code}\n```\n"
+            "Evaluate the code quality and the candidate's explanation. "
+            "If the code is incomplete, that's okay, you are in-progress. "
+            "Encourage them to continue or explain a specific part."
+        )
+
+    # Determine if this is the start of the interview
+    # If question_index is 0 and user_text is empty, it's a fallback for the intro
+    is_initial = (question_index == 0 and not user_text.strip())
+    is_skip = not user_text.strip() and not is_initial
     
     if is_initial:
         # ── INITIAL PROMPT: INTRODUCTION ──────────────────────────────────────────
         prompt = (
             "You are an technical interviewer. Please introduce yourself briefly (name/role) "
             "based on your persona, then ask a strong introductory question about the candidate's "
-            "background or their interest in the role."
+            "background or their interest in the role. "
+            "CRITICAL: Start your response with a clear greeting (e.g., 'Hello!', 'Hi there!', 'Welcome!') "
+            "to ensure the user starts hearing you immediately."
         )
         is_finished = False
         next_index = 0
+    elif is_coding_phase:
+        # Coding Challenge Prompt
+        prompt = (
+            f"The candidate is in a coding challenge. Their current code is: {current_code}. "
+            f"They said: '{user_text}'. React to their thought process and ask a guiding question "
+            "to help them move forward or justify a decision."
+        )
+        is_finished = False
+        next_index = question_index + 1
     elif float(timestamp_sec) < 260.0:
         # ── INTERMEDIATE PROMPT: TECHNICAL FOLLOW-UP ───────────────────────────────
         prompt = (
@@ -581,15 +661,21 @@ async def chat(request):
 
         # Send metadata at the end including the quality score A
         print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}, score: {quality_score}")
-        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
+        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished, 'is_coding_phase': is_coding_phase})}\n\n".encode())
 
         # ── BACKGROUND: Supabase Logging & Analysis ──
+        # Skip logging if this was a "safe skip" (empty response after intro)
+        if is_skip:
+            print(f"[DEBUG] Safe Skip detected for session={session_id}. Bypassing logging.")
+            return
+
         # We wrap this in a top-level task so the SSE stream can end independently
         async def finalize_turn_async():
             try:
                 if session_id:
-                    # Log the basic turn data immediately
-                    supabase_logger.log_keyframe(
+                    # Offload the blocking HTTP request to a background thread
+                    await asyncio.to_thread(
+                        supabase_logger.log_keyframe,
                         session_id=session_id,
                         timestamp_sec=float(timestamp_sec),
                         interviewer_question=f"Dynamic Question {question_index}",
@@ -598,25 +684,44 @@ async def chat(request):
                         keyframe_reason=f"AI Turn - Q{question_index + 1}"
                     )
                     
-                    # Wait slightly for biometric run_metrics_background tasks to finish logging
-                    await asyncio.sleep(2) 
+                    # Wait longer (10s) to give TTS and immediate playback a clear head start
+                    await asyncio.sleep(10) 
                     
-                    # Run full report analysis
-                    print(f"[DEBUG] background analysis starting for {session_id}...")
-                    report = await analyzer_engine.generate_report(session_id, persona_prompt or "Standard Technical Interviewer")
-                    supabase_logger.save_report(session_id, report)
-                    print(f"[DEBUG] background analysis complete for {session_id}")
+                    # Run full report analysis only every 3 turns to save on latency/crashes
+                    if question_index % 3 == 0:
+                        print(f"[DEBUG] background analysis starting for {session_id}...")
+                        try:
+                            # Use a timeout for the heavy analysis engine
+                            report = await asyncio.wait_for(
+                                analyzer_engine.generate_report(session_id, persona_prompt or "Standard Technical Interviewer"),
+                                timeout=45.0
+                            )
+                            # Offload the blocking save report call to a background thread
+                            await asyncio.to_thread(supabase_logger.save_report, session_id, report)
+                            print(f"[DEBUG] background analysis complete for {session_id}")
+                        except asyncio.TimeoutError:
+                            print(f"[WARNING] background analysis timed out for {session_id}")
+                        except Exception as e:
+                            print(f"[ERROR] background analysis failed: {e}")
             except Exception as bg_err:
                 logger.error(f"Background Finalization Error: {bg_err}")
 
-        # Fire and forget WITHOUT awaiting in the handler
-        asyncio.create_task(finalize_turn_async())
+        # No-op here, task fire moved to finally block or just before return
+        pass
 
     except Exception as e:
         logger.error(f"Chat Stream Error: {e}")
-        await response.write(f"data: {json.dumps({'error': str(e)})}\n\n".encode())
+        try:
+            await response.write(f"data: {json.dumps({'error': str(e)})}\n\n".encode())
+        except: pass
     
-    await response.write_eof()
+    finally:
+        await response.write_eof()
+        # Fire and forget WITHOUT awaiting in the handler, 
+        # but do it AFTER eof is written to free up the stream
+        if not is_skip and 'finalize_turn_async' in locals():
+            asyncio.create_task(finalize_turn_async())
+
     return response
 
 async def tts(request):
@@ -628,54 +733,55 @@ async def tts(request):
         gemini = get_gemini_client()
         audio_prompt = f"Please read the following text aloud naturally and professionally:\n\n{text}"
         
-        print(f"[DEBUG] Requesting TTS from Gemini...")
-        # We use a 30s timeout to avoid indefinite hangs
-        start_time = asyncio.get_event_loop().time()
-        response = await asyncio.wait_for(
-            gemini.aio.models.generate_content(
-                model="models/gemini-2.5-flash-preview-tts",
-                contents=audio_prompt,
-                config=types.GenerateContentConfig(
-                    response_modalities=["AUDIO"],
-                    speech_config=types.SpeechConfig(
-                        voice_config=types.VoiceConfig(
-                            prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                                voice_name=voice_name
-                            )
-                        )
-                    )
-                )
-            ),
-            timeout=30.0
-        )
-        end_time = asyncio.get_event_loop().time()
-        print(f"[DEBUG] Gemini TTS response received in {end_time - start_time:.2f}s")
+        print(f"[DEBUG] Requesting streaming TTS from Gemini...")
         
-        audio_bytes = None
-        for part in response.candidates[0].content.parts:
-            if hasattr(part, 'inline_data') and part.inline_data:
-                audio_bytes = part.inline_data.data
-                break
-            elif hasattr(part, 'blob') and part.blob:
-                audio_bytes = part.blob.data
-                break
+        # Prepare the streaming response
+        response = web.StreamResponse(
+            status=200,
+            reason='OK',
+            headers={
+                'Content-Type': 'application/octet-stream',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+            }
+        )
+        await response.prepare(request)
+
+        start_time = asyncio.get_event_loop().time()
+        first_chunk = True
+        
+        # Call generate_content_stream
+        gemini_stream_coro = gemini.aio.models.generate_content_stream(
+            model="models/gemini-2.5-flash-preview-tts",
+            contents=audio_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+            )
+        )
+        
+        # We need to await the stream generator
+        async for chunk in await gemini_stream_coro:
+            if first_chunk:
+                first_time = asyncio.get_event_loop().time()
+                print(f"[DEBUG] Gemini TTS first chunk received in {first_time - start_time:.2f}s")
+                first_chunk = False
                 
-        if not audio_bytes:
-            part_types = [type(p).__name__ for p in response.candidates[0].content.parts]
-            logger.error(f"No audio data found in response parts. Types present: {part_types}")
-            raise ValueError("No audio data returned from Gemini")
+            if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
+                continue
+                
+            part = chunk.candidates[0].content.parts[0]
+            if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
+                audio_bytes = part.inline_data.data
+                await response.write(audio_bytes)
+            elif hasattr(part, 'blob') and part.blob and part.blob.data:
+                audio_bytes = part.blob.data
+                await response.write(audio_bytes)
 
-        print(f"[DEBUG] Audio bytes received (size: {len(audio_bytes)}). Writing to temp file...")
-        temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.wav")
-        import wave
-        with wave.open(temp_audio, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2) # 16-bit
-            wav_file.setframerate(24000) # Gemini outputs 24kHz PCM
-            wav_file.writeframes(audio_bytes)
-
-        print(f"[DEBUG] TTS complete. Serving file: {temp_audio}")
-        return web.FileResponse(temp_audio)
+        await response.write_eof()
+        end_time = asyncio.get_event_loop().time()
+        print(f"[DEBUG] TTS stream complete in {end_time - start_time:.2f}s")
+        return response
+        
     except Exception as e:
         logger.error(f"Gemini TTS Error: {e}")
         return web.json_response({"error": str(e)}, status=500)

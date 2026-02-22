@@ -14,8 +14,11 @@ interface AvatarProps {
 }
 
 export interface AvatarHandle {
-    speak: (audioUrl: string, text: string) => Promise<void>;
+    startStream: () => Promise<void>;
+    appendStream: (text: string) => Promise<number>;
+    endStream: () => void;
     stop: () => void;
+    isLoaded: boolean;
 }
 
 const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
@@ -37,7 +40,7 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
         // TalkingHead expects the element to be available
         const head = new TalkingHead(containerRef.current, {
             lipsyncModules: [], // We'll register manually to bypass dynamic import issues
-            pcmSampleRate: 44100,
+            pcmSampleRate: 24000,
             cameraView: 'head',
             cameraDistance: -Math.abs(cameraZoom), // negative distance zooms in
             cameraRotateEnable: false,
@@ -108,6 +111,7 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
                 if (isMounted) {
                     setIsLoaded(true);
                     console.log("[Avatar] Model loaded successfully:", modelUrl);
+                    head.start(); // Enable initial idling
 
                     // Dynamically center the camera based on the avatar's actual head bone position
                     if (head.objectHead && head.avatarHeight) {
@@ -257,66 +261,110 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
     }, [cameraZoom, isLoaded]);
 
     useImperativeHandle(ref, () => ({
-        speak: async (audioUrl: string, text: string) => {
-            const head = headRef.current;
-            if (!head || !isLoaded) {
-                console.warn("[Avatar] speak() called but avatar not ready");
-                return;
+        isLoaded,
+        stop: () => {
+            if (headRef.current) {
+                console.log("[Avatar] Force stopping speech...");
+                headRef.current.stop();
             }
-
+        },
+        startStream: async () => {
+            const head = headRef.current;
+            if (!head || !isLoaded) return;
             try {
-                // Ensure audio context is running
                 if (head.audioCtx && head.audioCtx.state === 'suspended') {
                     await head.audioCtx.resume();
                 }
+                // TalkingHead.start() resumes the animation loop
+                head.start();
+                if (onAudioStart) onAudioStart();
+            } catch (err) {
+                console.error("[Avatar] startStream failed:", err);
+            }
+        },
+        appendStream: async (text: string): Promise<number> => {
+            const head = headRef.current;
+            if (!head || !isLoaded) return 0;
+            try {
+                const res = await fetch('http://127.0.0.1:8080/api/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
 
-                const res = await fetch(audioUrl);
-                const arrayBuffer = await res.arrayBuffer();
-                const audioBuffer = await head.audioCtx.decodeAudioData(arrayBuffer);
-                const durationMs = audioBuffer.duration * 1000;
+                if (!res.ok || !res.body) throw new Error(`TTS failed with ${res.status}`);
 
-                // Split text into words for better viseme timing
-                const words = text.trim().split(/\s+/);
-                const wordDur = durationMs / Math.max(1, words.length);
-                const wtimes = words.map((_, i) => i * wordDur);
-                const wdurations = new Array(words.length).fill(wordDur);
+                const reader = res.body.getReader();
+                const chunks: Uint8Array[] = [];
+                let totalLength = 0;
 
-                console.log(`[Avatar] Speak: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`);
-
-                // Diagnostic: check if visemes are being generated
-                const testVis = head.lipsync['en'].wordsToVisemes(words[0] || "hello");
-                if (!testVis || !testVis.visemes?.length) {
-                    console.warn("[Avatar] Lipsync module returned no visemes for first word!");
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    if (value) {
+                        chunks.push(value);
+                        totalLength += value.length;
+                    }
                 }
 
-                if (onAudioStart) onAudioStart();
+                // Combine chunks into a single ArrayBuffer
+                const combined = new Uint8Array(totalLength);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    combined.set(chunk, offset);
+                    offset += chunk.length;
+                }
 
-                // Add a small delay before speaking to ensure UI updates or other operations complete
-                await new Promise(resolve => setTimeout(resolve, 50));
+                // Convert 16-bit PCM (little-endian) to Float32 AudioBuffer natively
+                let audioBuffer: AudioBuffer | null = null;
+                if (head.audioCtx) {
+                    const dataView = new DataView(combined.buffer, combined.byteOffset, combined.byteLength);
+                    const sampleCount = Math.floor(combined.byteLength / 2);
+                    audioBuffer = head.audioCtx.createBuffer(1, sampleCount, 24000);
+                    if (audioBuffer) {
+                        const channelData = audioBuffer.getChannelData(0);
+                        for (let i = 0; i < sampleCount; i++) {
+                            // getInt16(byteOffset, littleEndian)
+                            const int16 = dataView.getInt16(i * 2, true);
+                            channelData[i] = int16 / 32768.0;
+                        }
+                    }
+                }
 
+                if (!audioBuffer) throw new Error("Could not decode audio buffer");
+
+                // Calculate word timings for lipsync
+                const durationMs = audioBuffer.duration * 1000;
+                const words = text.split(/\s+/).filter(w => w.trim().length > 0);
+                const wtimes: number[] = [];
+                const wdurations: number[] = [];
+                if (words.length > 0) {
+                    const wordDur = durationMs / words.length;
+                    for (let i = 0; i < words.length; i++) {
+                        wtimes.push(Math.round(i * wordDur));
+                        wdurations.push(Math.round(wordDur));
+                    }
+                }
+
+                // Enqueue in talkinghead natively using AudioBuffer
                 head.speakAudio({
                     audio: audioBuffer,
                     words: words,
                     wtimes: wtimes,
                     wdurations: wdurations
-                }, { lipsyncLang: 'en' });
+                });
 
-                setTimeout(() => {
-                    if (onAudioEnd) onAudioEnd();
-                }, durationMs);
+                return durationMs;
 
             } catch (err) {
-                console.error("[Avatar] Speech failed:", err);
-                if (onAudioEnd) onAudioEnd();
+                console.error("[Avatar] appendStream failed:", err);
+                return 0;
             }
         },
-        stop: () => {
-            const head = headRef.current;
-            if (head) {
-                head.stop();
-            }
+        endStream: () => {
+            if (onAudioEnd) onAudioEnd();
         }
-    }));
+    }), [isLoaded, onAudioStart, onAudioEnd]);
 
     return (
         <div style={{ width: "100%", height: "100%", position: "relative" }}>

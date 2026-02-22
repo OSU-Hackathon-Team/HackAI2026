@@ -122,10 +122,9 @@ export const useInterviewStore = create<InterviewStore>()(
       updateLastTranscriptText: (text) =>
         set((state) => {
           if (state.transcript.length === 0) return state;
-          const last = state.transcript[state.transcript.length - 1];
-          const updated = { ...last, text: last.text + text };
           const newList = [...state.transcript];
-          newList[newList.length - 1] = updated;
+          const lastIndex = newList.length - 1;
+          newList[lastIndex] = { ...newList[lastIndex], text: text };
           return { transcript: newList };
         }),
       setLiveAlert: (alert) => set({ liveAlert: alert }),

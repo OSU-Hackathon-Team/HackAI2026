@@ -82,6 +82,10 @@ export default function UploadPage() {
       setJobText(data.job_text);
       setSessionId(data.session_id);
 
+      if (data.initial_question) {
+        addTranscriptEntry({ time: 0, speaker: "interviewer", text: data.initial_question });
+      }
+
       setPhase("connecting");
       router.push("/interview");
     } catch (error) {
