@@ -526,9 +526,14 @@ export default function InterviewPage() {
     updateLastTranscriptText,
     liveAlert, setLiveAlert,
     startInterview,
+<<<<<<< HEAD
     sessionId, resumeText, jobText, interviewerPersona, interviewerModel,
     pressureScore, updatePressureScore, pressureTrend, updateEloScore,
     userId, role, company, biometrics
+=======
+    sessionId, resumeText, jobText, interviewerPersona, interviewerModel, interviewerVoice,
+    pressureScore, updatePressureScore, pressureTrend, updateEloScore
+>>>>>>> 3b0d0767bcc4213cc508ad0a6e492da6005b9f5e
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -641,7 +646,7 @@ export default function InterviewPage() {
                 fetch('http://127.0.0.1:8080/api/tts', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ text: fragmentForTTS }),
+                  body: JSON.stringify({ text: fragmentForTTS, voice: interviewerVoice }),
                 })
                   .then(r => {
                     if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
@@ -683,7 +688,7 @@ export default function InterviewPage() {
         fetch('http://127.0.0.1:8080/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: fragmentForTTS }),
+          body: JSON.stringify({ text: fragmentForTTS, voice: interviewerVoice }),
         })
           .then(r => {
             if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
@@ -1040,7 +1045,7 @@ export default function InterviewPage() {
         fetch('http://127.0.0.1:8080/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, voice: interviewerVoice }),
         }).then(r => r.blob()).then(blob => {
           if (audioQueueRef.current) {
             audioQueueRef.current.add(URL.createObjectURL(blob), text);
@@ -1078,7 +1083,7 @@ export default function InterviewPage() {
         fetch('http://127.0.0.1:8080/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: firstText }),
+          body: JSON.stringify({ text: firstText, voice: interviewerVoice }),
         }).then(r => r.blob()).then(blob => {
           if (audioQueueRef.current) {
             audioQueueRef.current.add(URL.createObjectURL(blob), firstText);

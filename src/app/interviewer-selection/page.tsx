@@ -24,7 +24,7 @@ import { INTERVIEWERS } from "@/types/interviewer";
 
 export default function InterviewerSelectionPage() {
     const router = useRouter();
-    const { setInterviewerPersona, setInterviewerModel, interviewerPersona, setRole, setCompany } = useInterviewStore();
+    const { setInterviewerPersona, setInterviewerModel, setInterviewerVoice, interviewerPersona, setRole, setCompany } = useInterviewStore();
     const [selectedSector, setSelectedSector] = useState<string | null>(null);
     const [hovered, setHovered] = useState<string | null>(null);
     const [expandedDifficulty, setExpandedDifficulty] = useState<string | null>("Easy");
@@ -32,6 +32,7 @@ export default function InterviewerSelectionPage() {
     const handleSelect = (inter: typeof INTERVIEWERS[0]) => {
         setInterviewerPersona(inter.id);
         setInterviewerModel(inter.model);
+        setInterviewerVoice(inter.voice);
         setRole(inter.role);
         const sectorName = SECTORS.find(s => s.id === selectedSector)?.name || "AceIt";
         setCompany(sectorName);
