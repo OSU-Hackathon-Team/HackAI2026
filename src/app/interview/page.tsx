@@ -73,6 +73,50 @@ function ScoreRing({ label, value, color }: { label: string; value: number; colo
   );
 }
 
+// ─── HUD METRIC CIRCLE ──────────────────────────────────────────────────────
+function HUDMetric({ label, value, color, glowColor }: { label: string; value: number; color: string; glowColor: string }) {
+  const r = 24;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (value / 100) * circ;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.6rem", flex: 1 }}>
+      <div style={{ position: "relative", width: "64px", height: "64px" }}>
+        {/* Background Ring */}
+        <svg width="64" height="64" viewBox="0 0 64 64" style={{ position: "absolute", top: 0, left: 0 }}>
+          <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="3" />
+          <circle
+            cx="32" cy="32" r={r} fill="none" stroke={color} strokeWidth="3"
+            strokeDasharray={circ} strokeDashoffset={offset}
+            strokeLinecap="round" transform="rotate(-90 32 32)"
+            style={{
+              transition: "stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)",
+              filter: `drop-shadow(0 0 6px ${glowColor})`
+            }}
+          />
+        </svg>
+        {/* Digital Value */}
+        <div style={{
+          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: "var(--font-mono)", fontSize: "1rem", color: "#fff", fontWeight: 700,
+          textShadow: `0 0 10px ${glowColor}`
+        }}>
+          {Math.round(value)}
+        </div>
+      </div>
+      <div style={{
+        fontFamily: "var(--font-mono)",
+        fontSize: "0.55rem",
+        color: "rgba(255,255,255,0.3)",
+        letterSpacing: "0.2em",
+        fontWeight: 600
+      }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
 // ─── PRESSURE GAUGE ───────────────────────────────────────────────────────────
 function PressureGauge({ score, trend }: { score: number; trend: "rising" | "falling" | "stable" }) {
   const getDifficultyLabel = (s: number) => {
@@ -361,34 +405,7 @@ function CameraPanel({
         </button>
       </div>
 
-      {/* ── LIVE DATA HUD ── */}
-      {cameraOn && isReady && (
-        <div style={{ position: "absolute", top: "1rem", left: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", pointerEvents: "none" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", padding: "0.4rem 0.75rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", width: "55px" }}>GAZE</span>
-            <div style={{ width: "60px", height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
-              <div style={{ width: `${gazeScore}%`, height: "100%", background: gazeScore > 70 ? "#00e096" : "#ffcc00", transition: "width 0.3s ease, background 0.3s ease" }} />
-            </div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "#fff", fontWeight: 700, width: "25px", textAlign: "right" }}>{gazeScore}</span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", padding: "0.4rem 0.75rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", width: "55px" }}>CONF.</span>
-            <div style={{ width: "60px", height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
-              <div style={{ width: `${confidence}%`, height: "100%", background: confidence > 70 ? "#00e5ff" : "#ff8800", transition: "width 0.3s ease, background 0.3s ease" }} />
-            </div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "#fff", fontWeight: 700, width: "25px", textAlign: "right" }}>{confidence}</span>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", padding: "0.4rem 0.75rem", borderRadius: "4px", border: "1px solid rgba(255,255,255,0.05)" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.4)", letterSpacing: "0.15em", width: "55px" }}>FIDGET</span>
-            <div style={{ width: "60px", height: "3px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
-              <div style={{ width: `${fidget}%`, height: "100%", background: fidget < 40 ? "#caff00" : "#ff4d6d", transition: "width 0.3s ease, background 0.3s ease" }} />
-            </div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.65rem", color: "#fff", fontWeight: 700, width: "25px", textAlign: "right" }}>{fidget}</span>
-          </div>
-        </div>
-      )}
+      {/* ── LIVE DATA HUD (MOVED) ── */}
     </div>
   );
 }
@@ -1130,39 +1147,75 @@ export default function InterviewPage() {
       {/* ── MAIN CONTENT ── */}
       <main style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "1.5rem", padding: "1.5rem 2rem", overflow: "hidden" }}>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-          <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
-            <AvatarPanel
-              isSpeaking={isSpeaking}
-              isProcessing={isProcessing}
-              avatarRef={avatarRef}
-              onAudioStart={() => setIsSpeaking(true)}
-              onAudioEnd={() => {
-                // signal next in queue
-                if (audioQueueRef.current) audioQueueRef.current.signalEnd();
-              }}
-              pressureScore={pressureScore}
-              pressureTrend={pressureTrend}
-            />
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+            <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
+              <AvatarPanel
+                isSpeaking={isSpeaking}
+                isProcessing={isProcessing}
+                avatarRef={avatarRef}
+                onAudioStart={() => setIsSpeaking(true)}
+                onAudioEnd={() => {
+                  // signal next in queue
+                  if (audioQueueRef.current) audioQueueRef.current.signalEnd();
+                }}
+                pressureScore={pressureScore}
+                pressureTrend={pressureTrend}
+              />
+            </div>
+            <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
+              <CameraPanel
+                videoRef={localVideoRef}
+                cameraOn={cameraOn}
+                micOn={micOn}
+                onToggleCamera={handleToggleCamera}
+                onToggleMic={handleToggleMic}
+                isRecording={isRecording}
+                isProcessing={isProcessing}
+                isSpeaking={isSpeaking}
+                onStartRecording={startRecording}
+                onStopRecording={stopRecording}
+                onStartInterview={handleStartInterviewCountdown}
+                isReady={isReady}
+                countdown={countdown}
+                gazeScore={gazeScore}
+                confidence={confidence}
+                fidget={fidget}
+              />
+            </div>
           </div>
-          <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
-            <CameraPanel
-              videoRef={localVideoRef}
-              cameraOn={cameraOn}
-              micOn={micOn}
-              onToggleCamera={handleToggleCamera}
-              onToggleMic={handleToggleMic}
-              isRecording={isRecording}
-              isProcessing={isProcessing}
-              isSpeaking={isSpeaking}
-              onStartRecording={startRecording}
-              onStopRecording={stopRecording}
-              onStartInterview={handleStartInterviewCountdown}
-              isReady={isReady}
-              countdown={countdown}
-              gazeScore={gazeScore}
-              confidence={confidence}
-              fidget={fidget}
+
+          {/* ── HUD DASHBOARD ── */}
+          <div style={{
+            display: "flex",
+            justifyContent: "space-around",
+            alignItems: "center",
+            background: "rgba(8,11,18,0.4)",
+            backdropFilter: "blur(12px)",
+            borderRadius: "16px",
+            border: "1px solid rgba(255,255,255,0.05)",
+            padding: "1.5rem",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+          }}>
+            <HUDMetric
+              label="GAZE_STABILITY"
+              value={gazeScore}
+              color={gazeScore > 70 ? "#00e096" : "#ffcc00"}
+              glowColor={gazeScore > 70 ? "rgba(0,224,150,0.4)" : "rgba(255,204,0,0.3)"}
+            />
+            <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+            <HUDMetric
+              label="NEURAL_CONFIDENCE"
+              value={confidence}
+              color={confidence > 70 ? "#00e5ff" : "#ff8800"}
+              glowColor={confidence > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,136,0,0.3)"}
+            />
+            <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+            <HUDMetric
+              label="KINETIC_FIDGET"
+              value={fidget}
+              color={fidget < 40 ? "#caff00" : "#ff4d6d"}
+              glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
             />
           </div>
         </div>

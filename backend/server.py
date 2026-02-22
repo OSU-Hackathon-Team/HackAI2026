@@ -548,11 +548,7 @@ async def chat(request):
                 print(f"[DEBUG] Extraction failed. Raw tail: ...{tail}")
 
         # Send metadata at the end including the quality score A
-<<<<<<< HEAD
         print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}, score: {quality_score}")
-=======
-        print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}")
->>>>>>> 6b406e67f092d605ad4675b6a329f96c631a8248
         await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
 
         # ── BACKGROUND: Supabase Logging & Analysis ──
@@ -642,11 +638,7 @@ async def tts(request):
         return web.FileResponse(temp_audio)
     except Exception as e:
         logger.error(f"Gemini TTS Error: {e}")
-<<<<<<< HEAD
-        return web.json_response({"error": str(e)}, status=505)
-=======
         return web.json_response({"error": str(e)}, status=500)
->>>>>>> 6b406e67f092d605ad4675b6a329f96c631a8248
 
 async def offer(request):
     try:
