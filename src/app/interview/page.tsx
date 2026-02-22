@@ -135,47 +135,33 @@ const getColor = (s: number) => {
 };
 
 // ─── PRESSURE GAUGE ───────────────────────────────────────────────────────────
-function PressureGauge({ score, trend }: { score: number; trend: "rising" | "falling" | "stable" }) {
-  const getDifficultyLabel = (s: number) => {
-    if (s < 20) return { label: "EASY", sub: "SUPPORTIVE" };
-    if (s < 40) return { label: "STANDARD", sub: "WARMING UP" };
-    if (s < 60) return { label: "STANDARD", sub: "PROFESSIONAL" };
-    if (s < 75) return { label: "RIGOROUS", sub: "PRESSING" };
-    if (s < 90) return { label: "ELITE", sub: "EXACTING" };
-    return { label: "ELITE", sub: "MAXIMUM PRESSURE" };
-  };
-
-  const labelData = getDifficultyLabel(score);
+// ─── OVERALL RESPONSE GRADE BAR ──────────────────────────────────────────────
+function OverallGradeBar({ score, trend }: { score: number; trend: "rising" | "falling" | "stable" }) {
   const color = getColor(score);
   const trendIcon = trend === "rising" ? "▲" : trend === "falling" ? "▼" : "─";
-  const trendColor = trend === "rising" ? "#ff5500" : trend === "falling" ? "#00e096" : "rgba(255,255,255,0.3)";
+  const trendColor = trend === "rising" ? "#ff2200" : trend === "falling" ? "#00e096" : "rgba(255,255,255,0.3)";
 
   return (
-    <div style={{ width: "100%", padding: "0.75rem 1.5rem", background: "rgba(0,0,0,0.3)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+    <div style={{ width: "100%", paddingTop: "1rem", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
-        <div style={{ zIndex: 3 }}>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.15em", marginBottom: "0.2rem" }}>DIFFICULTY_ENGINE</div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", color, fontWeight: 800, letterSpacing: "0.08em" }}>{labelData.label}</span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>{labelData.sub}</span>
-          </div>
+        <div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.6rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.15em" }}>OVERALL RESPONSE GRADE</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", zIndex: 3 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: trendColor, fontWeight: 800 }}>{trendIcon}</span>
-          <span style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color, lineHeight: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.6rem", color: trendColor, fontWeight: 800 }}>{trendIcon}</span>
+          <span style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color, lineHeight: 1, textShadow: `0 0 15px ${color}44` }}>
             {Math.round(score)}<span style={{ fontSize: "0.7rem", opacity: 0.5, marginLeft: "0.1rem" }}>/100</span>
           </span>
         </div>
       </div>
 
-      {/* Track */}
-      <div style={{ height: "3px", width: "100%", background: "rgba(255,255,255,0.06)", borderRadius: "2px", position: "relative", overflow: "hidden", zIndex: 3 }}>
+      <div style={{ height: "4px", width: "100%", background: "rgba(255,255,255,0.08)", borderRadius: "2px", position: "relative", overflow: "hidden" }}>
         <div style={{
           height: "100%",
           width: `${score}%`,
-          background: `linear-gradient(90deg, ${getColor(score * 0.4)}, ${color})`,
+          background: color,
           boxShadow: `0 0 12px ${color}`,
-          transition: "width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94), background 0.8s ease"
+          transition: "width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.8s ease"
         }} />
       </div>
     </div>
@@ -279,10 +265,6 @@ function AvatarPanel({
         <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--success)" : isProcessing ? "var(--accent)" : "rgba(255,255,255,0.3)", fontSize: "0.6rem", letterSpacing: "0.1em" }}>
           {isSpeaking ? "STATUS // TRANSMITTING" : isProcessing ? "STATUS // THINKING" : "STATUS // CAPTURING"}
         </div>
-      </div>
-
-      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2 }}>
-        <PressureGauge score={pressureScore} trend={pressureTrend} />
       </div>
     </div>
   );
@@ -594,14 +576,14 @@ function InterviewContent() {
     startInterview,
     sessionId, resumeText, jobText, interviewerPersona, interviewerModel, interviewerVoice,
     pressureScore, updatePressureScore, pressureTrend, updateEloScore,
-    userId, role, company, biometrics, interviewers, addSkippedQuestion, skippedQuestions, interviewStartTime
+    userId, role, company, biometrics, interviewers, addSkippedQuestion, skippedQuestions, interviewStartTime, makeEasier
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  const [gazeScore, setGazeScore] = useState(88);
-  const [confidence, setConfidence] = useState(82);
-  const [fidget, setFidget] = useState(12);
+  const [gazeScore, setGazeScore] = useState(100);
+  const [confidence, setConfidence] = useState(100);
+  const [fidget, setFidget] = useState(100);
   const [wpm, setWpm] = useState(0);
   const [pitchStability, setPitchStability] = useState(90);
   const [frequency, setFrequency] = useState(0);
@@ -1072,8 +1054,8 @@ function InterviewContent() {
           const msg = JSON.parse(event.data);
           if (msg.type === "video_inference") {
             const conf = Math.round(msg.confidence * 100);
-            const msgGaze = msg.gaze !== undefined ? Math.round(msg.gaze * 100) : 88;
-            const msgFidget = msg.fidget !== undefined ? Math.round(msg.fidget * 100) : 12;
+            const msgGaze = msg.gaze !== undefined ? Math.round(msg.gaze * 100) : 100;
+            const msgFidget = msg.fidget !== undefined ? Math.round(msg.fidget * 100) : 100;
 
             setConfidence(conf);
             setGazeScore(msgGaze);
@@ -1289,6 +1271,49 @@ function InterviewContent() {
     setTimeout(() => setLiveAlert(null), 3000);
   };
 
+  const handleMakeEasier = async () => {
+    // 1. Stop any active recording/TTS
+    if (isRecording) {
+      if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {
+        audioRecorderRef.current.onstop = null;
+        audioRecorderRef.current.stop();
+      }
+      if (videoRecorderRef.current && videoRecorderRef.current.state !== 'inactive') {
+        videoRecorderRef.current.onstop = null;
+        videoRecorderRef.current.stop();
+      }
+      audioRecorderRef.current = null;
+      videoRecorderRef.current = null;
+      audioChunksRef.current = [];
+      videoChunksRef.current = [];
+      setIsRecording(false);
+    }
+    if (audioQueueRef.current) {
+      audioQueueRef.current.stop();
+    }
+
+    // 2. Adjust ELO in store
+    makeEasier();
+
+    // 3. Determine degree of simplification based on CURRENT pressureScore (before state update reflecting in UI)
+    let degree = "slight difficulty reduction (simpler wording, fewer edge cases, more guided structure)";
+    if (pressureScore < 50) degree = "moderate difficulty reduction (break the problem into smaller steps, remove ambiguity, add a hint in the question itself)";
+    if (pressureScore < 10) degree = "significant difficulty reduction (simplest version of the concept, very explicit instructions, beginner-friendly framing)";
+
+    const systemPrompt = `[SYSTEM: The candidate has requested that the current question be made easier. Please regenerate the current question (or a very similar one) with a ${degree}. CRITICAL: Maintain a professional, supportive, and non-condescending tone. Do not point out that the question is simpler or comment on the candidate's request; just serve the easier question naturally.]`;
+
+    setIsProcessing(true);
+    try {
+      await handleChatStream(systemPrompt, true);
+    } finally {
+      setIsProcessing(false);
+    }
+
+    // Add a local notification
+    setLiveAlert("Simplifying question...");
+    setTimeout(() => setLiveAlert(null), 3000);
+  };
+
   const handleSkipToCoding = async () => {
     // 1. Log skip if there was a question
     const lastQuestion = [...transcript].reverse().find(e => e.speaker === 'interviewer');
@@ -1375,23 +1400,42 @@ function InterviewContent() {
         </div>
         <div style={{ display: "flex", gap: "0.75rem" }}>
           {isReady && (
-            <button
-              onClick={handleSkipQuestion}
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-                padding: "0.5rem 1.25rem",
-                fontSize: "0.8rem",
-                borderRadius: "4px",
-                cursor: "pointer",
-                transition: "all 0.2s ease"
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-            >
-              Skip Question
-            </button>
+            <>
+              <button
+                onClick={handleMakeEasier}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text)",
+                  padding: "0.5rem 1.25rem",
+                  fontSize: "0.8rem",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+              >
+                Make Easier
+              </button>
+              <button
+                onClick={handleSkipQuestion}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text)",
+                  padding: "0.5rem 1.25rem",
+                  fontSize: "0.8rem",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+              >
+                Skip Question
+              </button>
+            </>
           )}
           {!isCodingPhase && isReady && (
             <button
@@ -1488,37 +1532,42 @@ function InterviewContent() {
 
             {/* ── HUD DASHBOARD ── */}
             <div style={{
-              display: "flex",
-              justifyContent: "space-around",
-              alignItems: "center",
               background: "rgba(8,11,18,0.4)",
               backdropFilter: "blur(12px)",
               borderRadius: "16px",
               border: "1px solid rgba(255,255,255,0.05)",
               padding: "1.5rem",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.3)"
+              boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1rem"
             }}>
-              <HUDMetric
-                label="GAZE_STABILITY"
-                value={gazeScore}
-                color={gazeScore > 70 ? "#00e096" : "#ffcc00"}
-                glowColor={gazeScore > 70 ? "rgba(0,224,150,0.4)" : "rgba(255,204,0,0.3)"}
-              />
-              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
-              <HUDMetric
-                label="NEURAL_CONFIDENCE"
-                value={confidence}
-                color={confidence > 70 ? "#00e5ff" : "#ff8800"}
-                glowColor={confidence > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,136,0,0.3)"}
-              />
-              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
-              <HUDMetric
-                label="KINETIC_FIDGET"
-                value={fidget}
-                color={fidget < 40 ? "#caff00" : "#ff4d6d"}
-                glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
-              />
-              <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+              <div style={{
+                display: "flex",
+                justifyContent: "space-around",
+                alignItems: "center",
+              }}>
+                <HUDMetric
+                  label="GAZE_STABILITY"
+                  value={gazeScore}
+                  color={gazeScore > 70 ? "#00e096" : "#ffcc00"}
+                  glowColor={gazeScore > 70 ? "rgba(0,224,150,0.4)" : "rgba(255,204,0,0.3)"}
+                />
+                <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+                <HUDMetric
+                  label="NEURAL_CONFIDENCE"
+                  value={confidence}
+                  color={confidence > 70 ? "#00e5ff" : "#ff8800"}
+                  glowColor={confidence > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,136,0,0.3)"}
+                />
+                <div style={{ width: "1px", height: "40px", background: "rgba(255,255,255,0.05)" }} />
+                <HUDMetric
+                  label="KINETIC_FIDGET"
+                  value={fidget}
+                  color={fidget < 40 ? "#caff00" : "#ff4d6d"}
+                  glowColor={fidget < 40 ? "rgba(202,255,0,0.4)" : "rgba(255,77,109,0.3)"}
+                />
+              </div>
               <HUDMetric
                 label="VOCAL_PACE_WPM"
                 value={wpm}
@@ -1532,12 +1581,7 @@ function InterviewContent() {
                 color={pitchStability > 70 ? "#00e5ff" : "#ff4d6d"}
                 glowColor={pitchStability > 70 ? "rgba(0,229,255,0.4)" : "rgba(255,77,109,0.3)"}
               />
-              <HUDMetric
-                label="PRESSURE_ELO"
-                value={pressureScore}
-                color={getColor(pressureScore)}
-                glowColor={getColor(pressureScore) + "55"} // Dynamic glow matching pressure
-              />
+              <OverallGradeBar score={pressureScore} trend={pressureTrend} />
             </div>
           </div>
         )}
@@ -1583,11 +1627,19 @@ function InterviewContent() {
                 </div>
               </div>
               {/* Compact HUD in Coding Phase */}
-              <div style={{ display: "flex", gap: "0.5rem", background: "rgba(0,0,0,0.2)", padding: "0.5rem", borderRadius: "8px" }}>
-                <HUDMetric label="GAZE" value={gazeScore} color="#00e096" glowColor="rgba(0,224,150,0.2)" />
-                <HUDMetric label="CONF" value={confidence} color="#00e5ff" glowColor="rgba(0,229,255,0.2)" />
-                <HUDMetric label="FIDG" value={fidget} color="#caff00" glowColor="rgba(202,255,0,0.2)" />
-                <HUDMetric label="ELO" value={pressureScore} color={getColor(pressureScore)} glowColor={getColor(pressureScore) + "22"} />
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", background: "rgba(0,0,0,0.2)", padding: "0.75rem", borderRadius: "8px" }}>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <HUDMetric label="GAZE" value={gazeScore} color="#00e096" glowColor="rgba(0,224,150,0.2)" />
+                  <HUDMetric label="CONF" value={confidence} color="#00e5ff" glowColor="rgba(0,229,255,0.2)" />
+                  <HUDMetric label="FIDG" value={fidget} color="#caff00" glowColor="rgba(202,255,0,0.2)" />
+                </div>
+                <div style={{ width: "100%", height: "2px", background: "rgba(255,255,255,0.05)", borderRadius: "1px", overflow: "hidden" }}>
+                  <div style={{ width: `${pressureScore}%`, height: "100%", background: getColor(pressureScore), transition: "width 0.5s ease-out" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.5rem", color: "var(--muted)", fontFamily: "var(--font-mono)" }}>
+                  <span>REPONSE_GRADE</span>
+                  <span style={{ color: getColor(pressureScore) }}>{Math.round(pressureScore)}%</span>
+                </div>
               </div>
             </>
           )}

@@ -77,6 +77,7 @@ interface InterviewStore {
   setInterviewers: (interviewers: Interviewer[]) => void;
   clearSessionData: () => void;
 
+  makeEasier: () => void;
   reset: () => void;
 }
 
@@ -201,6 +202,19 @@ export const useInterviewStore = create<InterviewStore>()(
           pressureScore: normalizedScore,
           pressureTrend: trend,
           performanceHistory: [...state.performanceHistory, qualityA].slice(-5)
+        };
+      }),
+      makeEasier: () => set((state) => {
+        const s = state.pressureScore;
+        let drop = 200; // Fixed difficulty drop to ensure AI pivots down
+        if (s < 50) drop = 400;
+        if (s < 10) drop = 600;
+
+        const newDifficulty = Math.max(800, state.difficulty - drop);
+
+        return {
+          difficulty: newDifficulty,
+          pressureTrend: "falling"
         };
       }),
       clearSessionData: () =>
