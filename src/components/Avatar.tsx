@@ -61,20 +61,74 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
         head.setPoseFromTemplate = function (template: any, ms: number) {
             try {
                 // Ensure poseBase has all required properties from poseDelta to avoid .clone() on undefined
-                if (this.poseDelta?.props && this.poseBase?.props) {
-                    Object.keys(this.poseDelta.props).forEach(key => {
-                        if (!this.poseBase.props[key]) {
+                if (head.poseDelta?.props && head.poseBase?.props) {
+                    Object.keys(head.poseDelta.props).forEach(key => {
+                        if (!head.poseBase.props[key]) {
                             if (key.endsWith('.quaternion')) {
-                                this.poseBase.props[key] = new THREE.Quaternion();
+                                head.poseBase.props[key] = new THREE.Quaternion();
                             } else if (key.endsWith('.scale') || key.endsWith('.position')) {
-                                this.poseBase.props[key] = new THREE.Vector3(1, 1, 1);
+                                head.poseBase.props[key] = new THREE.Vector3(1, 1, 1);
                             }
                         }
                     });
                 }
-                return originalSetPoseFromTemplate.call(this, template, ms);
+                return originalSetPoseFromTemplate.call(head, template, ms);
             } catch (e) {
                 console.warn("[Avatar] Suppressed setPoseFromTemplate error:", e);
+            }
+        };
+
+        // NEW: Patch setView to prevent crash when controls are nullified by dispose()
+        const originalSetView = head.setView;
+        head.setView = function (view: any, opt: any) {
+            if (!head.controls || !head.camera) {
+                return;
+            }
+            try {
+                return originalSetView.call(head, view, opt);
+            } catch (e) {
+                console.warn("[Avatar] Suppressed setView error:", e);
+            }
+        };
+
+        // NEW: Patch speakAudio to prevent crash when nodeAvatar is nullified
+        const originalSpeakAudio = head.speakAudio;
+        head.speakAudio = function (opt: any) {
+            if (!head.nodeAvatar || !headRef.current) {
+                return;
+            }
+            try {
+                return originalSpeakAudio.call(head, opt);
+            } catch (e) {
+                console.warn("[Avatar] Suppressed speakAudio error:", e);
+            }
+        };
+
+        // NEW: Patch lookAt to prevent crash when nodeAvatar is null (the root of the reported error)
+        const originalLookAt = head.lookAt;
+        head.lookAt = function (target: any) {
+            if (!head.nodeAvatar || !headRef.current) return;
+            try {
+                return originalLookAt.call(head, target);
+            } catch (e) {
+                console.warn("[Avatar] Suppressed lookAt error:", e);
+            }
+        };
+
+        // NEW: Patch animate to prevent crash when controls/camera are nullified by dispose()
+        const originalAnimate = head.animate;
+        head.animate = (t: any) => {
+            // CRITICAL: If these are null, the library is disposing. 
+            // We must stop the loop by NOT calling requestAnimationFrame again.
+            if (!head.controls || !head.camera || !head.renderer || !head.nodeAvatar) {
+                head._raf = null;
+                return;
+            }
+            try {
+                return originalAnimate.call(head, t);
+            } catch (e) {
+                console.warn("[Avatar] Suppressed animate error:", e);
+                head._raf = null;
             }
         };
 
@@ -107,6 +161,8 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
                     avatarMood: 'neutral',
                     lipsyncLang: 'en'
                 });
+
+                if (!isMounted) return true;
 
                 if (isMounted) {
                     setIsLoaded(true);
@@ -263,14 +319,14 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
     useImperativeHandle(ref, () => ({
         isLoaded,
         stop: () => {
-            if (headRef.current) {
+            if (headRef.current && headRef.current.nodeAvatar) {
                 console.log("[Avatar] Force stopping speech...");
                 headRef.current.stop();
             }
         },
         startStream: async () => {
             const head = headRef.current;
-            if (!head || !isLoaded) return;
+            if (!head || !isLoaded || !head.nodeAvatar) return;
             try {
                 if (head.audioCtx && head.audioCtx.state === 'suspended') {
                     await head.audioCtx.resume();
@@ -332,6 +388,9 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
                 }
 
                 if (!audioBuffer) throw new Error("Could not decode audio buffer");
+
+                // Re-check head and nodeAvatar before final call (as async load might have taken time)
+                if (!headRef.current || !headRef.current.nodeAvatar) return 0;
 
                 // Calculate word timings for lipsync
                 const durationMs = audioBuffer.duration * 1000;

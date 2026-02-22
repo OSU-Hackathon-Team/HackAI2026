@@ -153,7 +153,8 @@ def extract_video_metrics(video_path):
         logging.error(f"Extract Video Metrics Error: {e}")
         return 0.5, 0.8, 0.1
 
-TECH_ROLES = ["engineer", "developer", "architect", "scientist", "analyst", "devops", "qa", "security", "ml", "software", "programmer"]
+TECH_ROLES = ["engineer", "developer", "architect", "scientist", "analyst", "devops", "qa", "security", "ml", "software", "programmer", "educator", "instructor", "coding", "programming"]
+
 
 def is_tech_job(job_text):
     if not job_text: return False
@@ -753,62 +754,86 @@ async def tts(request):
     text = data.get('text', '')
     voice_name = data.get('voice', 'Puck')
     print(f"[DEBUG] /api/tts hit! Length: {len(text)} chars, Voice: {voice_name}")
-    try:
-        gemini = get_gemini_client()
-        audio_prompt = f"Please read the following text aloud naturally and professionally:\n\n{text}"
-        
-        print(f"[DEBUG] Requesting streaming TTS from Gemini...")
-        
-        # Prepare the streaming response
-        response = web.StreamResponse(
-            status=200,
-            reason='OK',
-            headers={
-                'Content-Type': 'application/octet-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-            }
-        )
-        await response.prepare(request)
+    
+    gemini = get_gemini_client()
+    audio_prompt = f"Please read the following text aloud naturally and professionally:\n\n{text}"
 
-        start_time = asyncio.get_event_loop().time()
-        first_chunk = True
-        
-        # Call generate_content_stream
-        gemini_stream_coro = gemini.aio.models.generate_content_stream(
-            model="models/gemini-2.5-flash-preview-tts",
-            contents=audio_prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["AUDIO"],
+    # Prepare the streaming response object but don't prepare/send headers yet
+    response = web.StreamResponse(
+        status=200,
+        reason='OK',
+        headers={
+            'Content-Type': 'application/octet-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        }
+    )
+
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            print(f"[DEBUG] Requesting streaming TTS from Gemini (Attempt {attempt+1})...")
+            start_time = asyncio.get_event_loop().time()
+            
+            # 1. Initialize the stream coroutine
+            gemini_stream_coro = gemini.aio.models.generate_content_stream(
+                model="models/gemini-2.5-flash-preview-tts",
+                contents=audio_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["AUDIO"],
+                )
             )
-        )
-        
-        # We need to await the stream generator
-        async for chunk in await gemini_stream_coro:
-            if first_chunk:
-                first_time = asyncio.get_event_loop().time()
-                print(f"[DEBUG] Gemini TTS first chunk received in {first_time - start_time:.2f}s")
-                first_chunk = False
+            
+            # 2. Get the stream iterator
+            stream_it = await gemini_stream_coro
+            
+            # 3. Buffer the first chunk to ensure the stream is valid before sending headers
+            headers_prepared = False
+            
+            async for chunk in stream_it:
+                if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
+                    continue
+                    
+                part = chunk.candidates[0].content.parts[0]
+                audio_bytes = None
                 
-            if not chunk.candidates or not chunk.candidates[0].content or not chunk.candidates[0].content.parts:
-                continue
+                if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
+                    audio_bytes = part.inline_data.data
+                elif hasattr(part, 'blob') and part.blob and part.blob.data:
+                    audio_bytes = part.blob.data
                 
-            part = chunk.candidates[0].content.parts[0]
-            if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.data:
-                audio_bytes = part.inline_data.data
-                await response.write(audio_bytes)
-            elif hasattr(part, 'blob') and part.blob and part.blob.data:
-                audio_bytes = part.blob.data
-                await response.write(audio_bytes)
+                if audio_bytes:
+                    if not headers_prepared:
+                        await response.prepare(request)
+                        headers_prepared = True
+                        first_time = asyncio.get_event_loop().time()
+                        print(f"[DEBUG] Gemini TTS first chunk received in {first_time - start_time:.2f}s")
+                    
+                    await response.write(audio_bytes)
 
-        await response.write_eof()
-        end_time = asyncio.get_event_loop().time()
-        print(f"[DEBUG] TTS stream complete in {end_time - start_time:.2f}s")
-        return response
-        
-    except Exception as e:
-        logger.error(f"Gemini TTS Error: {e}")
-        return web.json_response({"error": str(e)}, status=500)
+            if headers_prepared:
+                await response.write_eof()
+                end_time = asyncio.get_event_loop().time()
+                print(f"[DEBUG] TTS stream complete in {end_time - start_time:.2f}s")
+                return response
+            else:
+                # We finished the loop without ever getting audio bytes
+                raise Exception("Gemini stream completed without sending any audio data.")
+
+        except Exception as e:
+            logger.error(f"Gemini TTS Error (Attempt {attempt+1}): {e}")
+            if attempt < max_retries:
+                # Wait a bit before retrying
+                await asyncio.sleep(1)
+                continue
+            
+            # If we already sent headers, we can't send a JSON error
+            if 'headers_prepared' in locals() and headers_prepared:
+                # The connection is already in an invalid state for a new response
+                # Just close the stream
+                return response
+            
+            return web.json_response({"error": str(e)}, status=500)
 
 async def offer(request):
     try:
