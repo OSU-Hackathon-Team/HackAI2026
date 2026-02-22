@@ -37,9 +37,13 @@ interface InterviewStore {
   aiCoachingReport: string | null;
   role: string;
   company: string;
-  // ── Chess Engine Adaptive System ──────────────────────────────────────────
-  pressureScore: number;           // 0-100, the live difficulty level
-  performanceHistory: number[];    // rolling window of last 5 raw scores (-1..1)
+  // ── Adaptive ELO System ──────────────────────────────────────────────────
+  pressureScore: number;           // 0-100, the normalized display score (baseline 50)
+  elo: number;                     // Internal ELO (starts at 1200)
+  difficulty: number;              // Internal Difficulty (starts at 1200)
+  questionCount: number;           // Number of questions answered
+  eloDeltas: number[];             // History of last 3 ELO changes for ΔS
+  performanceHistory: number[];    // rolling window of last 5 raw scores (A values 0..1)
   pressureTrend: "rising" | "falling" | "stable"; // direction for backend context
 
   setPhase: (phase: InterviewPhase) => void;
@@ -58,6 +62,7 @@ interface InterviewStore {
   setTranscript: (transcript: TranscriptEntry[]) => void;
   setRole: (role: string) => void;
   setCompany: (company: string) => void;
+  updateEloScore: (qualityA: number) => void;
   updatePressureScore: (rawScore: number) => void;
   reset: () => void;
 }
@@ -78,6 +83,10 @@ export const useInterviewStore = create<InterviewStore>()(
       role: "Software Engineer",
       company: "AceIt",
       pressureScore: 50,
+      elo: 1200,
+      difficulty: 1200,
+      questionCount: 0,
+      eloDeltas: [],
       performanceHistory: [],
       pressureTrend: "stable",
 
@@ -100,32 +109,72 @@ export const useInterviewStore = create<InterviewStore>()(
           return { transcript: newList };
         }),
       setLiveAlert: (alert) => set({ liveAlert: alert }),
-      startInterview: () =>
-        set({ phase: "live", interviewStartTime: Date.now() }),
+      startInterview: () => {
+        console.log("[DEBUG] Starting new interview session, resetting ELO tracking.");
+        set({
+          phase: "live",
+          interviewStartTime: Date.now(),
+          pressureScore: 50,
+          elo: 1200,
+          difficulty: 1200,
+          questionCount: 0,
+          eloDeltas: [],
+          performanceHistory: [],
+          pressureTrend: "stable",
+        });
+      },
       finishInterview: () => set({ phase: "processing" }),
       setAiCoachingReport: (report) => set({ aiCoachingReport: report }),
       setBiometrics: (biometrics) => set({ biometrics }),
       setTranscript: (transcript) => set({ transcript }),
       setRole: (role) => set({ role }),
       setCompany: (company) => set({ company }),
-      updatePressureScore: (rawScore) => set((state) => {
-        const WINDOW = 5;
-        const newHistory = [...state.performanceHistory, rawScore].slice(-WINDOW);
-        const expectedPerf = 1 / (1 + Math.pow(10, (50 - state.pressureScore) / 25));
-        const actualPerf = (rawScore + 1) / 2;
-        const surprise = Math.abs(actualPerf - expectedPerf);
-        const K = 20 + 30 * surprise;
-        const delta = K * (actualPerf - expectedPerf);
-        const newScore = Math.max(0, Math.min(100, state.pressureScore + delta));
-        const recentAvg = newHistory.slice(-3).reduce((a, b) => a + b, 0) / Math.max(1, Math.min(3, newHistory.length));
+      updateEloScore: (qualityA) => set((state) => {
+        const n = state.questionCount;
+        const ELO_BASELINE = 1200;
+
+        // 1. K(n) = 100 / (1 + 0.02 * n) -- Extreme volatility
+        const K = 100 / (1 + 0.02 * n);
+
+        // 2. E = 1 / (1 + 10^((D - ELO(n)) / 400))
+        const E = 1 / (1 + Math.pow(10, (state.difficulty - state.elo) / 400));
+
+        // 3. ELO(n+1) = ELO(n) + K * (qualityA - E)
+        const deltaElo = K * (qualityA - E);
+        const newElo = state.elo + deltaElo;
+
+        // 4. Update rolling deltas and ΔS (last 3)
+        const newEloDeltas = [...state.eloDeltas, deltaElo].slice(-3);
+        const deltaS = newEloDeltas.reduce((a, b) => a + b, 0);
+
+        // 5. D(next) = ELO(n) + 0.4 * ΔS
+        const nextDifficulty = newElo + 0.4 * deltaS;
+
+        // 6. Normalized Score (0-100)
+        // Sharper divisor (80 instead of 100) makes it extremely jumpy
+        const normalizedScore = (1 / (1 + Math.pow(10, (ELO_BASELINE - newElo) / 80))) * 100;
+
         const trend: "rising" | "falling" | "stable" =
-          newScore > state.pressureScore + 2 ? "rising" :
-            newScore < state.pressureScore - 2 ? "falling" : "stable";
+          deltaElo > 5 ? "rising" :
+            deltaElo < -5 ? "falling" : "stable";
+
+        console.log(`[ELO_DEBUG] n=${n}, K=${K.toFixed(2)}, E=${E.toFixed(3)}, A=${qualityA.toFixed(2)}`);
+        console.log(`[ELO_DEBUG] deltaElo=${deltaElo.toFixed(2)}, newElo=${newElo.toFixed(2)}`);
+        console.log(`[ELO_DEBUG] normalizedScore=${normalizedScore.toFixed(2)} (${Math.round(normalizedScore)})`);
+
         return {
-          pressureScore: newScore,
-          performanceHistory: newHistory,
+          elo: newElo,
+          difficulty: nextDifficulty,
+          questionCount: n + 1,
+          eloDeltas: newEloDeltas,
+          pressureScore: normalizedScore,
           pressureTrend: trend,
+          performanceHistory: [...state.performanceHistory, qualityA].slice(-5)
         };
+      }),
+      updatePressureScore: (rawScore) => set((state) => {
+        // Legacy fallback or combined logic if needed
+        return { pressureScore: state.pressureScore }; // No-op for now as we use ELO
       }),
       reset: () =>
         set({
@@ -142,6 +191,10 @@ export const useInterviewStore = create<InterviewStore>()(
           role: "Software Engineer",
           company: "AceIt",
           pressureScore: 50,
+          elo: 1200,
+          difficulty: 1200,
+          questionCount: 0,
+          eloDeltas: [],
           performanceHistory: [],
           pressureTrend: "stable",
         }),
