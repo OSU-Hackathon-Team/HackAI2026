@@ -340,6 +340,17 @@ async def init_session(request):
         )
         user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
         
+        # Immediate generation for first question
+        gemini = get_gemini_client()
+        response = await gemini.aio.models.generate_content(
+            model="models/gemini-3-flash-preview",
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+            )
+        )
+        initial_question = response.text or "Welcome. Tell me about your background."
+        
         session_id = f"session-{uuid.uuid4().hex[:8]}"
         
         # Save metadata to Supabase (Initial)
@@ -348,7 +359,8 @@ async def init_session(request):
         return web.json_response({
             "session_id": session_id,
             "resume_text": resume_text,
-            "job_text": job_description
+            "job_text": job_description,
+            "initial_question": initial_question
         })
     except Exception as e:
         import traceback
@@ -450,15 +462,19 @@ async def chat(request):
         "At the VERY END of your response, you MUST output a score tag in this EXACT format: [SCORE: 0.95] (using your calculated value between 0.0 and 1.0). "
         "DO NOT SKIP THIS TAG."
     )
-    # Determine if this is the start of the interview (no user text yet)
-    is_initial = not user_text.strip()
+    # Determine if this is the start of the interview
+    # If question_index is 0 and user_text is empty, it's a fallback for the intro
+    is_initial = (question_index == 0 and not user_text.strip())
+    is_skip = not user_text.strip() and not is_initial
     
     if is_initial:
         # ── INITIAL PROMPT: INTRODUCTION ──────────────────────────────────────────
         prompt = (
             "You are an technical interviewer. Please introduce yourself briefly (name/role) "
             "based on your persona, then ask a strong introductory question about the candidate's "
-            "background or their interest in the role."
+            "background or their interest in the role. "
+            "CRITICAL: Start your response with a clear greeting (e.g., 'Hello!', 'Hi there!', 'Welcome!') "
+            "to ensure the user starts hearing you immediately."
         )
         is_finished = False
         next_index = 0
@@ -563,9 +579,14 @@ async def chat(request):
 
         # Send metadata at the end including the quality score A
         print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}")
-        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
+        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished, 'skip_scoring': is_skip})}\n\n".encode())
 
         # ── BACKGROUND: Supabase Logging & Analysis ──
+        # Skip logging if this was a "safe skip" (empty response after intro)
+        if is_skip:
+            print(f"[DEBUG] Safe Skip detected for session={session_id}. Bypassing logging.")
+            return
+
         # We wrap this in a top-level task so the SSE stream can end independently
         async def finalize_turn_async():
             try:
@@ -614,7 +635,7 @@ async def tts(request):
         start_time = asyncio.get_event_loop().time()
         response = await asyncio.wait_for(
             gemini.aio.models.generate_content(
-                model="models/gemini-2.5-pro-preview-tts",
+                model="models/gemini-2.5-flash-preview-tts",
                 contents=audio_prompt,
                 config=types.GenerateContentConfig(
                     response_modalities=["AUDIO"],

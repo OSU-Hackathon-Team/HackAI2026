@@ -454,21 +454,31 @@ class AudioQueue {
   }
 
   private async playNext() {
-    if (this.queue.length === 0) {
+    if (!this.queue || this.queue.length === 0) {
       this.isPlaying = false;
       this.onEnd();
       return;
     }
-    this.isPlaying = true;
+
+    // Wait for avatar to be ready if it's not yet
+    let attempts = 0;
+    while (!this.avatarRef?.current && attempts < 50) {
+      console.log("[AudioQueue] ⏳ Waiting for avatar handle...");
+      await new Promise(r => setTimeout(r, 100));
+      attempts++;
+    }
+
     const item = this.queue.shift();
-    if (item && this.avatarRef.current) {
-      // Use TalkingHead's speak method
-      await this.avatarRef.current.speak(item.url, item.text);
-      // The actual end of playback should be signaled by TalkingHead, 
-      // but TalkingHead's onEnd is passed to speakText.
-      // So TalkingHead will call this.onEnd when it's done.
+    if (item && this.avatarRef?.current) {
+      this.isPlaying = true;
+      try {
+        await this.avatarRef.current.speak(item.url, item.text);
+      } catch (e) {
+        console.error("[AudioQueue] Speak failed:", e);
+        this.playNext();
+      }
     } else {
-      // Fallback or skip
+      console.warn("[AudioQueue] ✗ Skipping fragment: Avatar not found after wait.");
       this.playNext();
     }
   }
@@ -537,6 +547,11 @@ export default function InterviewPage() {
     if (!sessionId) return;
 
     try {
+      // Ensure AudioQueue is initialized so we don't blink/miss first fragment
+      if (!audioQueueRef.current) {
+        audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+      }
+
       // Chat for next question (STREAMING), pass current pressure score
       const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
         method: 'POST',
@@ -630,6 +645,14 @@ export default function InterviewPage() {
               }
             } else if (data.done) {
               setQuestionIndex(data.next_index);
+
+              // Only update score if not a "safe skip"
+              if (!data.skip_scoring) {
+                updateEloScore(data.quality_score);
+              } else {
+                console.log("[DEBUG] Safe Skip: ELO update bypassed.");
+              }
+
               if (data.is_finished) {
                 setTimeout(() => handleFinish(), 2000);
               }
@@ -809,6 +832,7 @@ export default function InterviewPage() {
   // ── Start timer + interview when user is ready ─────────────
   const handleStartInterviewCountdown = () => {
     if (countdown !== null) return;
+
     setCountdown(3);
     let current = 3;
     const ticker = setInterval(() => {
@@ -1015,39 +1039,49 @@ export default function InterviewPage() {
   }, [avatarRef, setIsSpeaking]);
 
 
-  // ── Timer — only runs once isReady is true ────────────────────────────────
+  // ── AI Intro Logic ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isReady) return;
-    const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+    // If we already have a transcript (from upload page), just trigger TTS for it
+    if (transcript.length > 0 && transcript[0].speaker === "interviewer" && !isIntroTriggeredRef.current) {
+      console.log("[DEBUG] First question already present, triggering TTS...");
+      isIntroTriggeredRef.current = true;
 
-    // If transcript is empty, trigger the intro
-    if (transcript.length === 0 && !isIntroTriggeredRef.current) {
-      console.log("[DEBUG] Triggering AI intro...");
+      const firstText = transcript[0].text;
+      setIsSpeaking(true);
+      fetch('http://127.0.0.1:8080/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: firstText }),
+      })
+        .then(r => r.blob())
+        .then(blob => {
+          if (!audioQueueRef.current) {
+            audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+          }
+          audioQueueRef.current.add(URL.createObjectURL(blob), firstText);
+        })
+        .catch(err => {
+          console.error("Initial TTS failed:", err);
+          setIsSpeaking(false);
+        });
+      return;
+    }
+
+    // Fallback if transcript is empty (direct navigation or refresh)
+    if (sessionId && !isIntroTriggeredRef.current && transcript.length === 0) {
+      console.log("[DEBUG] Manual trigger for AI intro...");
       isIntroTriggeredRef.current = true;
       setIsProcessing(true);
       handleChatStream("").finally(() => {
         setIsProcessing(false);
       });
-    } else if (transcript.length === 1 && transcript[0].speaker === "interviewer") {
-      // Legacy support or if intro was partially handled
-      const firstText = transcript[0].text;
-      if (firstText) {
-        if (!audioQueueRef.current) {
-          audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
-        }
-        setIsSpeaking(true);
-        fetch('http://127.0.0.1:8080/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: firstText }),
-        }).then(r => r.blob()).then(blob => {
-          if (audioQueueRef.current) {
-            audioQueueRef.current.add(URL.createObjectURL(blob), firstText);
-          }
-        });
-      }
     }
+  }, [sessionId, transcript.length]);
 
+  // ── Timer Logic ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isReady) return;
+    const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
     return () => clearInterval(interval);
   }, [isReady]);
 

@@ -103,10 +103,9 @@ export const useInterviewStore = create<InterviewStore>()(
       updateLastTranscriptText: (text) =>
         set((state) => {
           if (state.transcript.length === 0) return state;
-          const last = state.transcript[state.transcript.length - 1];
-          const updated = { ...last, text: last.text + text };
           const newList = [...state.transcript];
-          newList[newList.length - 1] = updated;
+          const lastIndex = newList.length - 1;
+          newList[lastIndex] = { ...newList[lastIndex], text: text };
           return { transcript: newList };
         }),
       setLiveAlert: (alert) => set({ liveAlert: alert }),
@@ -173,12 +172,7 @@ export const useInterviewStore = create<InterviewStore>()(
           performanceHistory: [...state.performanceHistory, qualityA].slice(-5)
         };
       }),
-<<<<<<< HEAD
-      updatePressureScore: (rawScore) => set((state) => {
-        // Legacy fallback or combined logic if needed
-        return { pressureScore: state.pressureScore }; // No-op for now as we use ELO
-      }),
-=======
+      updatePressureScore: (rawScore) => set({ pressureScore: rawScore }),
       clearSessionData: () =>
         set({
           sessionId: null,
@@ -191,7 +185,6 @@ export const useInterviewStore = create<InterviewStore>()(
           performanceHistory: [],
           pressureTrend: "stable",
         }),
->>>>>>> a7b5851b5b3ca49f1912684fa65b29a785da755a
       reset: () =>
         set({
           phase: "upload",
