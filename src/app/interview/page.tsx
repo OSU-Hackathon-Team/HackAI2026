@@ -110,7 +110,9 @@ function PressureGauge({ score, trend }: { score: number; trend: "rising" | "fal
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", zIndex: 3 }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: trendColor, fontWeight: 800 }}>{trendIcon}</span>
-          <span style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color, lineHeight: 1 }}>{Math.round(score)}</span>
+          <span style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color, lineHeight: 1 }}>
+            {Math.round(score)}<span style={{ fontSize: "0.7rem", opacity: 0.5, marginLeft: "0.1rem" }}>/100</span>
+          </span>
         </div>
       </div>
 
@@ -492,7 +494,7 @@ export default function InterviewPage() {
     liveAlert, setLiveAlert,
     startInterview,
     sessionId, resumeText, jobText, interviewerPersona,
-    pressureScore, updatePressureScore, pressureTrend
+    pressureScore, updatePressureScore, pressureTrend, updateEloScore
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -637,6 +639,30 @@ export default function InterviewPage() {
           }
         }
 
+        // Process any remaining lines in the buffer
+        if (streamBuffer.trim()) {
+          const lines = streamBuffer.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6).trim();
+              if (dataStr && dataStr !== '[DONE]') {
+                try {
+                  const data = JSON.parse(dataStr);
+                  if (data.token) {
+                    updateLastTranscriptText(data.token);
+                    sentenceBuffer += data.token;
+                  } else if (data.done) {
+                    doneMetadata = data;
+                    console.log("[DEBUG] Received doneMetadata:", data);
+                  }
+                } catch (e) {
+                  console.error("[DEBUG] Failed to parse SSE data chunk:", dataStr, e);
+                }
+              }
+            }
+          }
+        }
+
         // Final tail fragment if it didn't end with punctuation
         if (sentenceBuffer.trim().length > 0) {
           const fragment = sentenceBuffer.trim();
@@ -653,6 +679,14 @@ export default function InterviewPage() {
 
         if (doneMetadata) {
           setQuestionIndex(doneMetadata.next_index);
+
+          // Trigger ELO update with the score A returned by the LLM
+          if (doneMetadata.quality_score !== undefined) {
+            console.log(`[DEBUG] Received quality_score: ${doneMetadata.quality_score}`);
+            updateEloScore(doneMetadata.quality_score);
+            console.log(`[DEBUG] Store updated. New pressureScore: ${useInterviewStore.getState().pressureScore}`);
+          }
+
           if (doneMetadata.is_finished) {
             setTimeout(() => handleFinish(), 2000);
           }

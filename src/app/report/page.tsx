@@ -404,7 +404,9 @@ export default function ReportPage() {
   const avgGaze = safeData.length > 0 ? Math.round(safeData.reduce((s: number, d: any) => s + (d.gazeScore || 0), 0) / safeData.length) : 0;
   const avgConf = safeData.length > 0 ? Math.round(safeData.reduce((s: number, d: any) => s + (d.confidence || 0), 0) / safeData.length) : 0;
   const avgCalm = safeData.length > 0 ? Math.round(100 - safeData.reduce((s: number, d: any) => s + (d.fidgetIndex || 0), 0) / safeData.length) : 100;
-  const overall = Math.round((avgGaze + avgConf + avgCalm) / 3);
+
+  // Use the ELO-based pressureScore from store if in session, otherwise fallback to metadata
+  const overall = sessionDetails?.score ?? (sessionId ? Math.round(useInterviewStore.getState().pressureScore) : Math.round((avgGaze + avgConf + avgCalm) / 3));
   const spikeCount = safeData.filter((d: any) => d.stressSpike).length;
   const spikeTimestamps = new Set(safeData.filter((d: any) => d.stressSpike).map((d: any) => d.time));
 
