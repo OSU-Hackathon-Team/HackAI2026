@@ -8,7 +8,7 @@ import { useAuth } from "@clerk/nextjs";
 export default function UploadPage() {
   const router = useRouter();
   const { userId } = useAuth();
-  const { setResumeText, setJobText, setPhase, setSessionId, addTranscriptEntry, interviewerPersona, role, company } = useInterviewStore();
+  const { clearSessionData, setResumeText, setJobText, setPhase, setSessionId, addTranscriptEntry, interviewerPersona, role, company } = useInterviewStore();
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [jobText, setJobTextLocal] = useState("");
@@ -33,6 +33,7 @@ export default function UploadPage() {
   const handleSubmit = async () => {
     if (!resumeFile || !jobText.trim()) return;
     setIsLoading(true);
+    clearSessionData();
 
     try {
       const formData = new FormData();
@@ -59,13 +60,6 @@ export default function UploadPage() {
       setResumeText(data.resume_text);
       setJobText(data.job_text);
       setSessionId(data.session_id);
-
-      // Store the first question in the transcript
-      addTranscriptEntry({
-        time: 0,
-        speaker: "interviewer",
-        text: data.first_question
-      });
 
       setPhase("connecting");
       router.push("/interview");

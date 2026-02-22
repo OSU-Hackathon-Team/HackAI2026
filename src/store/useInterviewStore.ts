@@ -59,6 +59,7 @@ interface InterviewStore {
   setRole: (role: string) => void;
   setCompany: (company: string) => void;
   updatePressureScore: (rawScore: number) => void;
+  clearSessionData: () => void;
   reset: () => void;
 }
 
@@ -127,6 +128,18 @@ export const useInterviewStore = create<InterviewStore>()(
           pressureTrend: trend,
         };
       }),
+      clearSessionData: () =>
+        set({
+          sessionId: null,
+          biometrics: [],
+          transcript: [],
+          liveAlert: null,
+          interviewStartTime: null,
+          aiCoachingReport: null,
+          pressureScore: 50,
+          performanceHistory: [],
+          pressureTrend: "stable",
+        }),
       reset: () =>
         set({
           phase: "upload",

@@ -179,6 +179,7 @@ function scorePerformance(text: string): number {
 // ─── AI AVATAR PANEL (top half) ───────────────────────────────────────────────
 function AvatarPanel({
   isSpeaking,
+  isProcessing,
   avatarRef,
   onAudioStart,
   onAudioEnd,
@@ -186,6 +187,7 @@ function AvatarPanel({
   pressureTrend
 }: {
   isSpeaking: boolean;
+  isProcessing: boolean;
   avatarRef: React.RefObject<AvatarHandle | null>;
   onAudioStart: () => void;
   onAudioEnd: () => void;
@@ -207,8 +209,8 @@ function AvatarPanel({
 
       <div style={{ position: "absolute", top: "1rem", right: "1rem", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
         <div style={{ fontWeight: 800, letterSpacing: "0.2em", position: "relative", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "#fff", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>NEURAL_INTERVIEWER_V2</div>
-        <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--accent)" : "rgba(255,255,255,0.3)", fontSize: "0.6rem", letterSpacing: "0.1em" }}>
-          {isSpeaking ? "STATUS // TRANSMITTING" : "STATUS // CAPTURING"}
+        <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--success)" : isProcessing ? "var(--accent)" : "rgba(255,255,255,0.3)", fontSize: "0.6rem", letterSpacing: "0.1em" }}>
+          {isSpeaking ? "STATUS // TRANSMITTING" : isProcessing ? "STATUS // THINKING" : "STATUS // CAPTURING"}
         </div>
       </div>
 
@@ -325,7 +327,7 @@ function CameraPanel({
             }}
           >
             {isRecording && <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#fff", animation: "pulse-ring 1.2s infinite" }} />}
-            {isProcessing ? "ANALYZING..." : isSpeaking ? "AI SPEAKING..." : isRecording ? "STOP & SUBMIT" : "RECORD ANSWER"}
+            {isProcessing ? "THINKING..." : isSpeaking ? "SPEAKING..." : isRecording ? "STOP & SUBMIT" : "RECORD ANSWER"}
           </button>
         </div>
       )}
@@ -435,7 +437,7 @@ function ConnectionBadge({ status }: { status: "connecting" | "connected" | "fai
 // ─── AUDIO QUEUE HELPER ──────────────────────────────────────────────────────
 class AudioQueue {
   private queue: { url: string; text: string }[] = [];
-  private isPlaying = false;
+  public isPlaying = false;
   private onEnd: () => void;
   private avatarRef: React.RefObject<AvatarHandle | null>;
 
@@ -525,8 +527,147 @@ export default function InterviewPage() {
   const videoChunksRef = useRef<Blob[]>([]);
 
   const audioQueueRef = useRef<AudioQueue | null>(null);
+  const isIntroTriggeredRef = useRef(false);
 
   // ─── PIPELINE: Process Turn ───────────────────────────────────────────────
+  // ─── PIPELINE: Handle Chat Stream ──────────────────────────────────────────
+  const handleChatStream = async (inputText: string) => {
+    if (!sessionId) return;
+
+    try {
+      // Chat for next question (STREAMING), pass current pressure score
+      const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: inputText,
+          question_index: questionIndex,
+          session_id: sessionId,
+          timestamp_sec: elapsedSeconds,
+          resume_text: resumeText,
+          job_text: jobText,
+          interviewer_persona: interviewerPersona,
+          pressure_score: pressureScore,
+          pressure_trend: pressureTrend
+        }),
+      });
+
+      if (!chatRes.ok) {
+        throw new Error(`Chat API error: ${chatRes.status}`);
+      }
+
+      const reader = chatRes.body?.getReader();
+      if (!reader) throw new Error("No reader found on chat response");
+
+      const decoder = new TextDecoder();
+      let fullSentence = "";
+      let sentenceBuffer = ""; // Accumulate text for TTS sentence detection
+      let streamBuffer = ""; // Accumulate text across chunks
+
+      // Initialize an empty entry for the interviewer
+      addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text: "" });
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        streamBuffer += decoder.decode(value, { stream: true });
+        const lines = streamBuffer.split('\n');
+        streamBuffer = lines.pop() || ""; // Keep the last (potentially incomplete) line
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.substring(6);
+            let data;
+            try {
+              data = JSON.parse(dataStr);
+            } catch (err) {
+              console.error("JSON parse error in stream:", err, dataStr);
+              continue;
+            }
+
+            if (data.error) {
+              console.error("Backend returned error in stream:", data.error);
+              updateLastTranscriptText(`[ERROR: ${data.error}]`);
+              break;
+            }
+
+            if (data.token) {
+              const fragment = data.token;
+              fullSentence += fragment;
+              sentenceBuffer += fragment;
+              updateLastTranscriptText(fullSentence);
+
+              // ── TTS SENTENCE BREAK DETECTION ─────────────────────────────────────
+              if (/[.!?]$/.test(sentenceBuffer.trim())) {
+                const fragmentForTTS = sentenceBuffer.trim();
+                sentenceBuffer = ""; // Reset buffer for next sentence
+
+                setIsSpeaking(true);
+                fetch('http://127.0.0.1:8080/api/tts', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ text: fragmentForTTS }),
+                })
+                  .then(r => {
+                    if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
+                    return r.blob();
+                  })
+                  .then(blob => {
+                    if (audioQueueRef.current) {
+                      audioQueueRef.current.add(URL.createObjectURL(blob), fragmentForTTS);
+                    }
+                  })
+                  .catch(err => {
+                    console.error("TTS Fetch Error:", err);
+                    // If TTS fails, we should at least not stay "Speaking" forever if queue is empty
+                    if (audioQueueRef.current && !audioQueueRef.current.isPlaying) {
+                      setIsSpeaking(false);
+                    }
+                  });
+              }
+            } else if (data.done) {
+              setQuestionIndex(data.next_index);
+              if (data.is_finished) {
+                setTimeout(() => handleFinish(), 2000);
+              }
+            }
+          }
+        }
+      }
+
+      // Final tail fragment if it didn't end with punctuation
+      if (sentenceBuffer.trim().length > 0) {
+        const fragmentForTTS = sentenceBuffer.trim();
+        fetch('http://127.0.0.1:8080/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: fragmentForTTS }),
+        })
+          .then(r => {
+            if (!r.ok) throw new Error(`TTS failed with ${r.status}`);
+            return r.blob();
+          })
+          .then(blob => {
+            if (audioQueueRef.current) {
+              audioQueueRef.current.add(URL.createObjectURL(blob), fragmentForTTS);
+            }
+          })
+          .catch(err => {
+            console.error("TTS Fetch Error (final fragment):", err);
+            if (audioQueueRef.current && !audioQueueRef.current.isPlaying) {
+              setIsSpeaking(false);
+            }
+          });
+      }
+
+    } catch (err) {
+      console.error("Chat stream handling failed:", err);
+      setLiveAlert("AI response failed. Please try recording again.");
+    }
+  };
+
+  // ── PIPELINE: Process Turn ───────────────────────────────────────────────
   const processTurn = async (audioBlob: Blob | null, videoBlob: Blob | null) => {
     if (!sessionId) return;
     if (!audioBlob) {
@@ -561,102 +702,8 @@ export default function InterviewPage() {
         const perfDelta = scorePerformance(streamData.text);
         updatePressureScore(perfDelta);
 
-        // 2. Chat for next question (STREAMING), pass current pressure score
-        const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: streamData.text,
-            question_index: questionIndex,
-            session_id: sessionId,
-            timestamp_sec: elapsedSeconds,
-            resume_text: resumeText,
-            job_text: jobText,
-            interviewer_persona: interviewerPersona,
-            pressure_score: pressureScore,
-            pressure_trend: pressureTrend
-          }),
-        });
-
-        if (!chatRes.body) return;
-        const reader = chatRes.body.getReader();
-        const decoder = new TextDecoder();
-
-        addTranscriptEntry({ time: elapsedSeconds, speaker: 'interviewer', text: "" });
-
-        let sentenceBuffer = "";
-        let doneMetadata: any = null;
-        let streamBuffer = ""; // Accumulate text across chunks
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          streamBuffer += decoder.decode(value, { stream: true });
-          const lines = streamBuffer.split('\n');
-          // Keep the last incomplete line in the buffer
-          streamBuffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const dataStr = line.slice(6).trim();
-              if (!dataStr || dataStr === '[DONE]') continue;
-
-              let data;
-              try {
-                data = JSON.parse(dataStr);
-              } catch (e) {
-                console.error("Failed to parse SSE JSON:", dataStr, e);
-                continue;
-              }
-
-              if (data.token) {
-                updateLastTranscriptText(data.token);
-                sentenceBuffer += data.token;
-
-                // Trigger TTS for each complete sentence
-                if (/[.!?]$/.test(sentenceBuffer.trim())) {
-                  const fragment = sentenceBuffer.trim();
-                  sentenceBuffer = ""; // Clear for next fragment
-
-                  setIsSpeaking(true);
-                  fetch('http://127.0.0.1:8080/api/tts', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: fragment }),
-                  }).then(r => r.blob()).then(blob => {
-                    if (audioQueueRef.current) {
-                      audioQueueRef.current.add(URL.createObjectURL(blob), fragment);
-                    }
-                  });
-                }
-              } else if (data.done) {
-                doneMetadata = data;
-              }
-            }
-          }
-        }
-
-        // Final tail fragment if it didn't end with punctuation
-        if (sentenceBuffer.trim().length > 0) {
-          const fragment = sentenceBuffer.trim();
-          fetch('http://127.0.0.1:8080/api/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: fragment }),
-          }).then(r => r.blob()).then(blob => {
-            if (audioQueueRef.current) {
-              audioQueueRef.current.add(URL.createObjectURL(blob), fragment);
-            }
-          });
-        }
-
-        if (doneMetadata) {
-          setQuestionIndex(doneMetadata.next_index);
-          if (doneMetadata.is_finished) {
-            setTimeout(() => handleFinish(), 2000);
-          }
-        }
+        // 2. Chat for next question (STREAMING)
+        await handleChatStream(streamData.text);
       }
     } catch (err) {
       console.error("Turn processing failed:", err);
@@ -971,8 +1018,16 @@ export default function InterviewPage() {
     if (!isReady) return;
     const interval = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
 
-    // Speak the first question if it exists in the transcript
-    if (transcript.length > 0 && transcript[0].speaker === "interviewer") {
+    // If transcript is empty, trigger the intro
+    if (transcript.length === 0 && !isIntroTriggeredRef.current) {
+      console.log("[DEBUG] Triggering AI intro...");
+      isIntroTriggeredRef.current = true;
+      setIsProcessing(true);
+      handleChatStream("").finally(() => {
+        setIsProcessing(false);
+      });
+    } else if (transcript.length === 1 && transcript[0].speaker === "interviewer") {
+      // Legacy support or if intro was partially handled
       const firstText = transcript[0].text;
       if (firstText) {
         if (!audioQueueRef.current) {
@@ -1070,9 +1125,13 @@ export default function InterviewPage() {
           <div style={{ borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "1/1", display: "flex", flexDirection: "column" }}>
             <AvatarPanel
               isSpeaking={isSpeaking}
+              isProcessing={isProcessing}
               avatarRef={avatarRef}
               onAudioStart={() => setIsSpeaking(true)}
-              onAudioEnd={() => audioQueueRef.current?.signalEnd()}
+              onAudioEnd={() => {
+                // signal next in queue
+                if (audioQueueRef.current) audioQueueRef.current.signalEnd();
+              }}
               pressureScore={pressureScore}
               pressureTrend={pressureTrend}
             />
