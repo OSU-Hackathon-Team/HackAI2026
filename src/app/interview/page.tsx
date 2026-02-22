@@ -69,24 +69,151 @@ function ScoreRing({ label, value, color }: { label: string; value: number; colo
   );
 }
 
-// ─── AI AVATAR PANEL (top half) ───────────────────────────────────────────────
-function AvatarPanel({ isSpeaking }: { isSpeaking: boolean }) {
+// ─── PRESSURE GAUGE ───────────────────────────────────────────────────────────
+function PressureGauge({ score, trend }: { score: number; trend: "rising" | "falling" | "stable" }) {
+  const getDifficultyLabel = (s: number) => {
+    if (s < 20) return { label: "EASY", sub: "SUPPORTIVE" };
+    if (s < 40) return { label: "STANDARD", sub: "WARMING UP" };
+    if (s < 60) return { label: "STANDARD", sub: "PROFESSIONAL" };
+    if (s < 75) return { label: "RIGOROUS", sub: "PRESSING" };
+    if (s < 90) return { label: "ELITE", sub: "EXACTING" };
+    return { label: "ELITE", sub: "MAXIMUM PRESSURE" };
+  };
+
+  const getColor = (s: number) => {
+    // Smooth color interpolation
+    if (s < 25) return "#00e096";  // Mint green
+    if (s < 50) return "#caff00";  // Acid green
+    if (s < 70) return "#ffcc00";  // Yellow
+    if (s < 85) return "#ff8800";  // Orange
+    return "#ff2200";               // Red
+  };
+
+  const { label, sub } = getDifficultyLabel(score);
+  const color = getColor(score);
+  const trendIcon = trend === "rising" ? "▲" : trend === "falling" ? "▼" : "─";
+  const trendColor = trend === "rising" ? "#ff5500" : trend === "falling" ? "#00e096" : "rgba(255,255,255,0.3)";
+
   return (
-    <div style={{ position: "relative", width: "100%", flex: 1, background: "linear-gradient(135deg, #0e1e35 0%, #0a1525 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
-      <div style={{ position: "relative", width: "100px", height: "100px", borderRadius: "50%", background: "linear-gradient(135deg, var(--accent2), var(--accent))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem", boxShadow: isSpeaking ? "0 0 40px rgba(0,229,255,0.4)" : "0 0 20px rgba(0,229,255,0.1)", transition: "box-shadow 0.3s ease" }}>
+    <div style={{ width: "100%", padding: "0.75rem 1.5rem", background: "rgba(0,0,0,0.3)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
+        <div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.15em", marginBottom: "0.2rem" }}>DIFFICULTY_ENGINE</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", color, fontWeight: 800, letterSpacing: "0.08em" }}>{label}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>{sub}</span>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: trendColor, fontWeight: 800 }}>{trendIcon}</span>
+          <span style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color, lineHeight: 1 }}>{Math.round(score)}</span>
+        </div>
+      </div>
+
+      {/* Track */}
+      <div style={{ height: "3px", width: "100%", background: "rgba(255,255,255,0.06)", borderRadius: "2px", position: "relative", overflow: "hidden" }}>
+        <div style={{
+          height: "100%",
+          width: `${score}%`,
+          background: `linear-gradient(90deg, ${getColor(score * 0.4)}, ${color})`,
+          boxShadow: `0 0 12px ${color}`,
+          transition: "width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94), background 0.8s ease"
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── CHESS ENGINE SCORING RUBRIC ────────────────────────────────────────────────────
+/**
+ * All signals use continuous tanh (sigmoid) functions — no if/else thresholds.
+ * sig(x, center, slope) = tanh((x - center) / slope)
+ * Values span (-1, +1) with a smooth, differentiable gradient.
+ *
+ * Calibration table:
+ *   depthScore:       10 words → -0.78  |  35 words → 0     |  80 words → +0.86
+ *   techScore:        0 hits   → -0.71  |  2 hits   → +0.29 |  5 hits  → +0.95
+ *   specificityScore: 0 marks  → -0.59  |  2 marks  → +0.57 |  4 marks → +0.93
+ *   structureScore:   1 sent   → -0.76  |  2 sents  → 0     |  3+ sents → +0.76
+ *
+ * Pressure update uses ELO formula (see store).
+ */
+function scorePerformance(text: string): number {
+  const lower = text.toLowerCase();
+  const wordCount = text.trim().split(/\s+/).length;
+  const sentenceCount = text.split(/[.!?]+/).filter(s => s.trim().length > 5).length;
+
+  // Helper: continuous sigmoid centered at `center`, scaled by `slope`
+  const sig = (x: number, center: number, slope: number) =>
+    Math.tanh((x - center) / slope);
+
+  // ── Signal 1: DEPTH — center=35 words, slope=25 ──────────────────────────────
+  const depthScore = sig(wordCount, 35, 25);
+
+  // ── Signal 2: TECHNICAL DENSITY ───────────────────────────────────────────
+  const techKeywords = [
+    "algorithm", "complexity", "architecture", "scalability", "latency",
+    "throughput", "trade-off", "tradeoff", "distributed", "consistency",
+    "availability", "partition", "database", "cache", "api", "microservice",
+    "kubernetes", "docker", "ci/cd", "pipeline", "deployed", "implemented",
+    "optimized", "refactored", "async", "concurrent", "thread", "memory",
+    "time complexity", "space complexity", "o(n"
+  ];
+  const techHits = techKeywords.filter(k => lower.includes(k)).length;
+  // ── center=1.5 hits, slope=1.5: 0 → -0.71, 2 → +0.29, 5 → +0.95 ─────────────
+  const techScore = sig(techHits, 1.5, 1.5);
+
+  // ── Signal 3: SPECIFICITY (concrete examples, numbers, names) ─────────────
+  const specificityMarkers = [
+    "specifically", "for example", "for instance", "such as", "in particular",
+    "we used", "i built", "i led", "i reduced", "i increased", "resulted in",
+    "percent", "%", "ms", "seconds", "million", "thousand", "users"
+  ];
+  const numberHits = (text.match(/\b\d+(\.\d+)?[kmb%]?\b/gi) || []).length;
+  const specificityHits = specificityMarkers.filter(m => lower.includes(m)).length + numberHits;
+  // ── center=1 hit, slope=1.2: 0 → -0.59, 2 → +0.57, 4 → +0.93 ─────────────────
+  const specificityScore = sig(specificityHits, 1, 1.2);
+
+  // ── Signal 4: STRUCTURE — center=2 sentences, slope=1 ────────────────────
+  const structureScore = sig(sentenceCount, 2, 1);
+
+  // ── Signal 5: FILLER PENALTY ──────────────────────────────────────────────
+  const fillers = ["um", "uh", "like", "you know", "basically", "kind of", "sort of", "i mean"];
+  const fillerCount = fillers.filter(f => lower.includes(f)).length;
+  // Continuous density penalty: tanh(filler_rate * 3), never discrete ─────────────
+  const fillerDensity = fillerCount / Math.max(1, wordCount / 10);
+  const fillerPenalty = Math.tanh(fillerDensity * 3);
+
+  // ── Weighted Composite (dot product of all signals) ───────────────────────
+  const raw = (
+    depthScore * 0.35 +
+    techScore * 0.30 +
+    specificityScore * 0.20 +
+    structureScore * 0.15
+  ) - fillerPenalty * 0.5;
+
+  return Math.max(-1, Math.min(1, raw));
+}
+
+// ─── AI AVATAR PANEL (top half) ───────────────────────────────────────────────
+function AvatarPanel({ isSpeaking, pressureScore, pressureTrend }: { isSpeaking: boolean, pressureScore: number, pressureTrend: "rising" | "falling" | "stable" }) {
+  return (
+    <div style={{ position: "relative", width: "100%", flex: 1, background: "linear-gradient(135deg, #050508 0%, #0a0a0f 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+      <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(202,255,0,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(202,255,0,0.02) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+
+      <div style={{ position: "relative", width: "100px", height: "100px", borderRadius: "2px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem", boxShadow: isSpeaking ? "0 0 40px rgba(202,255,0,0.15)" : "none", transition: "all 0.3s ease" }}>
         🤖
         {isSpeaking && (
-          <div style={{ position: "absolute", inset: "-8px", borderRadius: "50%", border: "2px solid var(--accent)", animation: "pulse-ring 1.5s ease-out infinite" }} />
+          <div style={{ position: "absolute", inset: "-8px", border: "1px solid var(--accent)", animation: "pulse-ring 1.5s ease-out infinite" }} />
         )}
       </div>
-      <div style={{ marginTop: "0.75rem", fontWeight: 600, letterSpacing: "0.05em", position: "relative" }}>AI Interviewer</div>
-      <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--accent)" : "var(--muted)" }}>
-        {isSpeaking ? "● SPEAKING" : "LISTENING"}
+
+      <div style={{ marginTop: "1rem", fontWeight: 800, letterSpacing: "0.2em", position: "relative", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "#fff" }}>NEURAL_INTERVIEWER_V2</div>
+      <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--accent)" : "rgba(255,255,255,0.3)", fontSize: "0.6rem", letterSpacing: "0.1em" }}>
+        {isSpeaking ? "STATUS // TRANSMITTING" : "STATUS // CAPTURING"}
       </div>
-      <div className="label" style={{ position: "absolute", bottom: "0.75rem", opacity: 0.4 }}>
-        [ 3D Avatar — Three.js / TalkingHead ]
-      </div>
+
+      <PressureGauge score={pressureScore} trend={pressureTrend} />
     </div>
   );
 }
@@ -316,7 +443,8 @@ export default function InterviewPage() {
     updateLastTranscriptText,
     liveAlert, setLiveAlert,
     startInterview,
-    sessionId, resumeText, jobText, interviewerPersona
+    sessionId, resumeText, jobText, interviewerPersona,
+    pressureScore, updatePressureScore, pressureTrend
   } = useInterviewStore();
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -380,7 +508,11 @@ export default function InterviewPage() {
       if (streamData.text) {
         addTranscriptEntry({ time: elapsedSeconds, speaker: 'user', text: streamData.text });
 
-        // 2. Chat for next question (STREAMING)
+        // Score response and update pressure
+        const perfDelta = scorePerformance(streamData.text);
+        updatePressureScore(perfDelta);
+
+        // 2. Chat for next question (STREAMING), pass current pressure score
         const chatRes = await fetch('http://127.0.0.1:8080/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -391,7 +523,9 @@ export default function InterviewPage() {
             timestamp_sec: elapsedSeconds,
             resume_text: resumeText,
             job_text: jobText,
-            interviewer_persona: interviewerPersona
+            interviewer_persona: interviewerPersona,
+            pressure_score: pressureScore,
+            pressure_trend: pressureTrend
           }),
         });
 
@@ -836,7 +970,7 @@ export default function InterviewPage() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           <div style={{ display: "flex", flexDirection: "column", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "4/3" }}>
-            <AvatarPanel isSpeaking={isSpeaking} />
+            <AvatarPanel isSpeaking={isSpeaking} pressureScore={pressureScore} pressureTrend={pressureTrend} />
             <div style={{ height: "1px", background: "var(--border)", flexShrink: 0 }} />
             <CameraPanel
               videoRef={localVideoRef}
