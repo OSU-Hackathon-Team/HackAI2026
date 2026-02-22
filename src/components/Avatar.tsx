@@ -19,6 +19,9 @@ export interface AvatarHandle {
     endStream: () => void;
     stop: () => void;
     isLoaded: boolean;
+    isSpeaking: () => boolean;
+    waitForLoad: () => Promise<void>;
+    waitForSpeechDone: () => Promise<void>;
 }
 
 const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
@@ -30,6 +33,7 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
     const containerRef = useRef<HTMLDivElement>(null);
     const headRef = useRef<any>(null);
     const [isLoaded, setIsLoaded] = useState(false);
+    const lastAppendTime = useRef<number>(0);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -341,6 +345,7 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
         appendStream: async (text: string): Promise<number> => {
             const head = headRef.current;
             if (!head || !isLoaded) return 0;
+            lastAppendTime.current = Date.now();
             try {
                 const res = await fetch('http://127.0.0.1:8080/api/tts', {
                     method: 'POST',
@@ -437,6 +442,32 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
         },
         endStream: () => {
             if (onAudioEnd) onAudioEnd();
+        },
+        isSpeaking: () => {
+            return headRef.current?.stateName === 'speaking';
+        },
+        waitForLoad: async () => {
+            while (!isLoaded && headRef.current) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+            await new Promise(r => setTimeout(r, 5000)); // 5s stabilization delay per user request
+        },
+        waitForSpeechDone: async () => {
+            let timeout = 0;
+            // Wait while it's either speaking OR we just appended something (buffering)
+            while (timeout < 250) { // Max 25s safety
+                const now = Date.now();
+                const isRecentlyAppended = (now - lastAppendTime.current) < 1500;
+                const isSpeaking = headRef.current?.stateName === 'speaking';
+
+                if (!isSpeaking && !isRecentlyAppended) {
+                    break;
+                }
+
+                await new Promise(r => setTimeout(r, 100));
+                timeout++;
+            }
+            await new Promise(r => setTimeout(r, 5000)); // 5s natural pause after speaking per user request
         }
     }), [isLoaded, onAudioStart, onAudioEnd]);
 
