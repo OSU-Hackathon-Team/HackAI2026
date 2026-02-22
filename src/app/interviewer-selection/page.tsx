@@ -20,39 +20,18 @@ const SECTORS = [
     { id: "industrial", name: "Industrial / Real Economy", icon: "🏗️", desc: "Manufacturing, energy, transportation, construction, agriculture, utilities.", color: "#4db6ac" },
 ];
 
-const INTERVIEWERS = [
-    { id: "01_tech_pragmatist", sector: "tech", name: "The Pragmatic Lead", role: "Software Engineering", difficulty: "Medium", traits: "Practical, Direct", color: "var(--cyan)" },
-    { id: "02_quant_trader", sector: "finance", name: "The Intense Quant", role: "Finance / Trading", difficulty: "Very Hard", traits: "Aggressive, Analytical", color: "var(--pink)" },
-    { id: "03_hr_recruiter", sector: "tech", name: "The Empathetic Recruiter", role: "Human Resources", difficulty: "Easy", traits: "Warm, Supportive", color: "var(--green)" },
-    { id: "04_startup_founder", sector: "tech", name: "The Visionary Founder", role: "Startup / Tech", difficulty: "Hard", traits: "Energetic, Demanding", color: "var(--purple)" },
-    { id: "05_medical_chief", sector: "health", name: "The Medical Chief", role: "Healthcare", difficulty: "Hard", traits: "Risk-Averse, Ethical", color: "#ff8a65" },
-    { id: "06_creative_director", sector: "tech", name: "The Creative Director", role: "Design / Arts", difficulty: "Medium", traits: "Intuitive, Visual", color: "#ce93d8" },
-    { id: "07_seasoned_lawyer", sector: "industrial", name: "The Seasoned Lawyer", role: "Legal", difficulty: "Hard", traits: "Skeptical, Precise", color: "#90a4ae" },
-    { id: "08_sales_director", sector: "finance", name: "The Sales Director", role: "Sales / Business", difficulty: "Medium", traits: "Charismatic, Results-Driven", color: "#ffd54f" },
-    { id: "09_mechanical_lead", sector: "industrial", name: "The Mechanical Lead", role: "Engineering", difficulty: "Medium", traits: "Structural, Logical", color: "#4db6ac" },
-    { id: "10_data_scientist", sector: "tech", name: "The Data Scientist", role: "Data / AI", difficulty: "Hard", traits: "Theoretical, Curious", color: "#7986cb" },
-    { id: "11_meta_hacker", sector: "tech", name: "The Meta Hacker", role: "Security / Systems", difficulty: "Insane", traits: "Brilliant, Chaotic", color: "#00e5ff" },
-    { id: "12_river_manager", sector: "industrial", name: "The Operation Manager", role: "Logistics", difficulty: "Medium", traits: "Efficient, Strict", color: "#81c784" },
-    { id: "13_orchard_perfectionist", sector: "industrial", name: "The Quality Lead", role: "Manufacturing", difficulty: "Hard", traits: "Meticulous, Stubborn", color: "#aed581" },
-    { id: "14_searchco_architect", sector: "tech", name: "The Search Architect", role: "Big Tech", difficulty: "Very Hard", traits: "Scale-Obsessed, Cold", color: "#64b5f6" },
-    { id: "15_streamflix_chaos", sector: "tech", name: "The Chaos Engineer", role: "SRE / Cloud", difficulty: "Hard", traits: "Panic-Driven, Sharp", color: "#e57373" },
-    { id: "16_cyber_red_teamer", sector: "tech", name: "The Red Teamer", role: "Cybersecurity", difficulty: "Very Hard", traits: "Invasive, Cunning", color: "#ba68c8" },
-    { id: "17_devops_evangelist", sector: "tech", name: "The DevOps Zealot", role: "Infrastructure", difficulty: "Medium", traits: "Process-Heavy, Loud", color: "#4fc3f7" },
-    { id: "18_kernel_hacker", sector: "tech", name: "The Kernel Guru", role: "Low-Level Systems", difficulty: "Very Hard", traits: "Minimalist, Deep", color: "#a1887f" },
-    { id: "19_ml_postdoc", sector: "tech", name: "The ML Researcher", role: "Academic AI", difficulty: "Hard", traits: "Nuanced, Skeptical", color: "#dce775" },
-    { id: "20_google_engineer", sector: "tech", name: "The L6 Engineer", role: "Big Tech G", difficulty: "Hard", traits: "Standardized, Methodical", color: "#4285f4" },
-    { id: "21_microsoft_architect", sector: "tech", name: "The Enterprise Architect", role: "Big Tech M", difficulty: "Hard", traits: "Complex, Scalable", color: "#0078d4" },
-];
+import { INTERVIEWERS } from "@/types/interviewer";
 
 export default function InterviewerSelectionPage() {
     const router = useRouter();
-    const { setInterviewerPersona, interviewerPersona, setRole, setCompany } = useInterviewStore();
+    const { setInterviewerPersona, setInterviewerModel, interviewerPersona, setRole, setCompany } = useInterviewStore();
     const [selectedSector, setSelectedSector] = useState<string | null>(null);
     const [hovered, setHovered] = useState<string | null>(null);
     const [expandedDifficulty, setExpandedDifficulty] = useState<string | null>("Easy");
 
     const handleSelect = (inter: typeof INTERVIEWERS[0]) => {
         setInterviewerPersona(inter.id);
+        setInterviewerModel(inter.model);
         setRole(inter.role);
         const sectorName = SECTORS.find(s => s.id === selectedSector)?.name || "AceIt";
         setCompany(sectorName);
@@ -306,11 +285,15 @@ export default function InterviewerSelectionPage() {
                                                     <p style={{ fontSize: "0.75rem", color: "#5a6a82", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.05em" }}>{inter.role}</p>
                                                 </div>
 
-                                                <div style={{ fontSize: "0.85rem", color: "#8899aa", lineHeight: 1.5, fontFamily: "'DM Mono', monospace", borderTop: "1px solid #1e2a3a", paddingTop: "0.75rem" }}>
+                                                <div style={{ fontSize: "0.82rem", color: "#8b9cb3", lineHeight: 1.55, fontFamily: "'DM Mono', monospace", marginTop: "0.25rem" }}>
+                                                    {inter.description}
+                                                </div>
+
+                                                <div style={{ fontSize: "0.8rem", color: "#8899aa", lineHeight: 1.5, fontFamily: "'DM Mono', monospace", borderTop: "1px solid #1e2a3a", paddingTop: "0.75rem", marginTop: "auto" }}>
                                                     <span style={{ color: inter.color, fontWeight: 600 }}>Traits:</span> {inter.traits}
                                                 </div>
 
-                                                <div style={{ marginTop: "auto", alignSelf: "flex-end" }}>
+                                                <div style={{ alignSelf: "flex-end" }}>
                                                     <div style={{ fontSize: "0.7rem", fontFamily: "'DM Mono', monospace", color: hovered === inter.id ? inter.color : "transparent", transition: "color 0.2s" }}>SELECT PERSONA →</div>
                                                 </div>
                                             </div>

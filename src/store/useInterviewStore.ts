@@ -32,6 +32,7 @@ interface InterviewStore {
   biometrics: BiometricPoint[];
   transcript: TranscriptEntry[];
   interviewerPersona: string | null;
+  interviewerModel: string | null;
   liveAlert: string | null;
   interviewStartTime: number | null;
   aiCoachingReport: string | null;
@@ -51,6 +52,7 @@ interface InterviewStore {
   setResumeText: (text: string) => void;
   setJobText: (text: string) => void;
   setInterviewerPersona: (persona: string) => void;
+  setInterviewerModel: (model: string) => void;
   addBiometricPoint: (point: BiometricPoint) => void;
   addTranscriptEntry: (entry: TranscriptEntry) => void;
   updateLastTranscriptText: (text: string) => void;
@@ -76,6 +78,7 @@ export const useInterviewStore = create<InterviewStore>()(
       resumeText: null,
       jobText: null,
       interviewerPersona: "10_data_scientist", // Default
+      interviewerModel: "/models/business_girl.glb", // Default
       biometrics: [],
       transcript: [],
       liveAlert: null,
@@ -96,6 +99,7 @@ export const useInterviewStore = create<InterviewStore>()(
       setResumeText: (text) => set({ resumeText: text }),
       setJobText: (text) => set({ jobText: text }),
       setInterviewerPersona: (persona) => set({ interviewerPersona: persona }),
+      setInterviewerModel: (model) => set({ interviewerModel: model }),
       addBiometricPoint: (point) =>
         set((state) => ({ biometrics: [...state.biometrics, point] })),
       addTranscriptEntry: (entry) =>
@@ -173,12 +177,10 @@ export const useInterviewStore = create<InterviewStore>()(
           performanceHistory: [...state.performanceHistory, qualityA].slice(-5)
         };
       }),
-<<<<<<< HEAD
       updatePressureScore: (rawScore) => set((state) => {
         // Legacy fallback or combined logic if needed
         return { pressureScore: state.pressureScore }; // No-op for now as we use ELO
       }),
-=======
       clearSessionData: () =>
         set({
           sessionId: null,
@@ -191,7 +193,6 @@ export const useInterviewStore = create<InterviewStore>()(
           performanceHistory: [],
           pressureTrend: "stable",
         }),
->>>>>>> a7b5851b5b3ca49f1912684fa65b29a785da755a
       reset: () =>
         set({
           phase: "upload",
@@ -199,6 +200,7 @@ export const useInterviewStore = create<InterviewStore>()(
           resumeText: null,
           jobText: null,
           interviewerPersona: "10_data_scientist",
+          interviewerModel: "/models/business_girl.glb",
           biometrics: [],
           transcript: [],
           liveAlert: null,

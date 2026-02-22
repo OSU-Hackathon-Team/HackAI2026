@@ -31,6 +31,7 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
         if (!containerRef.current) return;
 
         let isMounted = true;
+        setIsLoaded(false);
 
         // TalkingHead expects the element to be available
         const head = new TalkingHead(containerRef.current, {
@@ -93,8 +94,6 @@ const Avatar = forwardRef<AvatarHandle, AvatarProps>(({
 
             // Proceed to load the visual model regardless of audio state
             try {
-                if (isLoaded) return true;
-
                 await new Promise(resolve => setTimeout(resolve, 50));
                 if (!isMounted) return true;
 

@@ -64,6 +64,14 @@ try:
         return _gemini_client
         
     analyzer_engine = InterviewAnalyzerEngine()
+    
+    # Load base prompt constraints
+    BASE_PROMPT = ""
+    base_prompt_path = os.path.join(BACKEND_DIR, "prompts", "base_prompt.txt")
+    if os.path.exists(base_prompt_path):
+        with open(base_prompt_path, "r") as f:
+            BASE_PROMPT = f.read()
+            
     print("Backend initialization successful (Models, API clients, & Analyzer ready)")
 except Exception as e:
     print(f"CRITICAL ERROR: Failed to initialize backend components: {e}")
@@ -434,7 +442,10 @@ async def chat(request):
         trend_modifier = " [TREND: FALLING — the candidate is struggling. Ease up slightly. Focus on confidence recovery without drastically changing your persona.]"
 
     system_prompt = (
+        f"{BASE_PROMPT}\n\n"
+        f"--- CURRENT INTERVIEWER PERSONA ---\n"
         f"{persona_prompt}\n\n"
+        f"--- ADAPTIVE DIFFICULTY INSTRUCTION ---\n"
         f"{difficulty_mode}{trend_modifier}\n\n"
         "Keep your response under 3 sentences. "
         "First, react to the candidate's last answer in 1 sentence (do not be generic). "
