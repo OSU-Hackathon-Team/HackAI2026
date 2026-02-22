@@ -139,7 +139,22 @@ class VideoStreamProcessor:
         self.feature_history = []
         self.device = device
         self.model = get_visual_model() # Use lazy global
-        self.face_landmarker, self.hand_landmarker = get_landmarkers()
+        # Initialize landmarkers locally to avoid cross-thread corruption in MediaPipe landmarker calls
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision
+        
+        face_opts = vision.FaceLandmarkerOptions(
+            base_options=mp_python.BaseOptions(model_asset_path=os.path.join(BACKEND_DIR, "models", "face_landmarker.task")),
+            output_face_blendshapes=True,
+            running_mode=vision.RunningMode.IMAGE)
+        self.face_landmarker = vision.FaceLandmarker.create_from_options(face_opts)
+
+        hand_opts = vision.HandLandmarkerOptions(
+            base_options=mp_python.BaseOptions(model_asset_path=os.path.join(BACKEND_DIR, "models", "hand_landmarker.task")),
+            num_hands=2,
+            running_mode=vision.RunningMode.IMAGE)
+        self.hand_landmarker = vision.HandLandmarker.create_from_options(hand_opts)
+        
         self.task = asyncio.create_task(self._process_stream())
 
     def process_mediapipe_results(self, face_result, hand_result):
@@ -147,12 +162,16 @@ class VideoStreamProcessor:
         return process_mediapipe_results(face_result, hand_result)
 
     def do_inference(self):
-        if len(self.feature_history) < 10: return 0.5, 0.8, 0.1
+        if len(self.feature_history) < 10:
+            print(f"[DEBUG] Defaulting: history too short ({len(self.feature_history)})")
+            return 0.5, 0.8, 0.1
         now_ms = self.feature_history[-1][0]
         start_ms = now_ms - WINDOW_SIZE_MS
         window_data = [f for t, f in self.feature_history if t >= start_ms]
         window_times = [t for t, f in self.feature_history if t >= start_ms]
-        if len(window_data) < 5: return 0.5, 0.8, 0.1
+        if len(window_data) < 5:
+            print(f"[DEBUG] Defaulting: window data too small ({len(window_data)})")
+            return 0.5, 0.8, 0.1
 
         window_data = np.array(window_data)
         window_times = np.array(window_times)
@@ -175,7 +194,8 @@ class VideoStreamProcessor:
                 conf = probs[0][1].item() # CONFIDENT score
             
             return float(conf), float(gaze_score), float(fidget_index)
-        except Exception:
+        except Exception as e:
+            print(f"[DEBUG] Defaulting: inference exception: {e}")
             return 0.5, float(gaze_score), float(fidget_index)
 
     async def _process_stream(self):
@@ -199,6 +219,7 @@ class VideoStreamProcessor:
                     last_inference_time = current_time
                     conf, gaze, fidget = await asyncio.to_thread(self.do_inference)
                     
+                    print(f"[DEBUG] Sending Inference: C={conf}, G={gaze}, F={fidget}")
                     self.datachannel_manager.send_json({
                         "type": "video_inference",
                         "NEURAL_CONFIDENCE": conf,
@@ -216,8 +237,11 @@ class VideoStreamProcessor:
             except Exception as e:
                 err_str = str(e)
                 if "Connection lost" not in err_str and "Stream connection lost" not in err_str and "Track was closed" not in err_str:
-                    print(f"Video iteration error: {e}")
-                break
+                    print(f"Video processing warning: {e}")
+                # Don't break on non-fatal frame errors to keep the stream alive
+                if "Connection lost" in err_str or "Track was closed" in err_str:
+                    break
+                await asyncio.sleep(0.01) # Small cool-off
 
     def _detect_and_buffer(self, mp_image, timestamp_ms):
         try:

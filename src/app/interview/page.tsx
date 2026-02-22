@@ -1734,6 +1734,30 @@ const GlobalStyles = () => (
       background: linear-gradient(90deg, transparent, rgba(95,200,255,0.3), transparent);
     }
 
+    /* Custom scrollbar for cyberpunk feel */
+    *::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    *::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 10px;
+    }
+    *::-webkit-scrollbar-thumb {
+      background: rgba(95, 200, 255, 0.15);
+      border-radius: 10px;
+      transition: all 0.2s ease;
+    }
+    *::-webkit-scrollbar-thumb:hover {
+      background: rgba(95, 200, 255, 0.3);
+    }
+    
+    /* Transparent scrollbar for some areas */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+
     .btn-primary {
       display: inline-flex; align-items: center; gap: 0.4rem;
       background: linear-gradient(135deg, #5fc8ff, #9b6fff);
@@ -1808,7 +1832,7 @@ function CodingTask({ transcript }: { transcript: { speaker: string; text: strin
   const lastInterviewerMessage = [...transcript].reverse().find(m => m.speaker === 'interviewer');
 
   return (
-    <div className="card fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", padding: "1.5rem", gap: "1rem", overflow: "hidden" }}>
+    <div className="card fade-up" style={{ flex: 1, display: "flex", flexDirection: "column", padding: "1.5rem", gap: "1rem", overflow: "hidden", minHeight: 0 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#5fc8ff", animation: "blink 2s ease-in-out infinite" }} />
@@ -2423,6 +2447,11 @@ function InterviewContent() {
             const conf = Math.round((msg.NEURAL_CONFIDENCE ?? msg.confidence ?? 0.5) * 100);
             const msgGaze = Math.round((msg.GAZE_STABILITY ?? msg.gaze ?? 0.8) * 100);
             const msgFidget = Math.round((msg.KINETIC_FIDGET ?? msg.fidget ?? 0.1) * 100);
+
+            if (Math.random() > 0.9) {
+              console.log("[DEBUG] Video Inference:", { raw: msg, parsed: { conf, msgGaze, msgFidget } });
+            }
+
             setConfidence(conf); setGazeScore(msgGaze); setFidget(msgFidget);
             addBiometricPoint({ time: Math.round(msg.timestamp / 1000), gazeScore: msgGaze, confidence: conf, fidgetIndex: msgFidget, stressSpike: conf < 40 });
           }
@@ -2719,7 +2748,7 @@ function InterviewContent() {
   const interviewerName = interviewers.find(i => i.id === interviewerPersona)?.name || "Technical Interviewer";
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", gridTemplateRows: "64px 1fr", background: "var(--bg)", position: "relative" }}>
+    <div style={{ height: "100vh", maxHeight: "100vh", display: "grid", gridTemplateRows: "64px 1fr", background: "var(--bg)", position: "relative", overflow: "hidden" }}>
       <GlobalStyles />
 
       {countdown !== null && <CountdownOverlay countdown={countdown} />}
@@ -2771,7 +2800,7 @@ function InterviewContent() {
       </header>
 
       {/* ── MAIN ── */}
-      <main style={{ display: "grid", gridTemplateColumns: isCodingPhase ? "1.5fr minmax(320px, 1fr)" : "1fr minmax(320px, 22.5rem)", gap: "1.25rem", padding: "1.25rem 1.75rem", overflow: "hidden", position: "relative", zIndex: 1 }}>
+      <main style={{ display: "grid", gridTemplateColumns: isCodingPhase ? "1.5fr minmax(320px, 1fr)" : "1fr minmax(320px, 22.5rem)", gap: "1.25rem", padding: "1.25rem 1.75rem", overflow: "hidden", position: "relative", zIndex: 1, minHeight: 0 }}>
 
         {/* ── LEFT COLUMN ── */}
         {isCodingPhase ? (
@@ -2836,7 +2865,7 @@ function InterviewContent() {
         )}
 
         {/* ── RIGHT COLUMN ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", overflow: "hidden", minHeight: 0 }}>
 
           {isCodingPhase ? (
             /* Coding phase: Avatar + Camera + Coding Task */
@@ -2859,7 +2888,7 @@ function InterviewContent() {
             /* Regular interview phase: Panels + Transcript */
             <>
               {/* Transcript panel */}
-              <div className="card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "1.125rem" }}>
+              <div className="card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "1.125rem", minHeight: 0 }}>
                 {/* Header */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
