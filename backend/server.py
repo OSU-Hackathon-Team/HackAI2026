@@ -153,6 +153,13 @@ def extract_video_metrics(video_path):
         logging.error(f"Extract Video Metrics Error: {e}")
         return 0.5, 0.8, 0.1
 
+TECH_ROLES = ["engineer", "developer", "architect", "scientist", "analyst", "devops", "qa", "security", "ml", "software", "programmer"]
+
+def is_tech_job(job_text):
+    if not job_text: return False
+    lower_job = job_text.lower()
+    return any(role in lower_job for role in TECH_ROLES)
+
 print("Defining handlers...")
 
 async def heartbeat(request):
@@ -403,6 +410,7 @@ async def chat(request):
     pressure_score = data.get('pressure_score', 50)
     pressure_trend = data.get('pressure_trend', 'stable')
     history = data.get('history', [])
+    current_code = data.get('code', '')
 
     # Format history for prompt context
     history_context = ""
@@ -415,6 +423,21 @@ async def chat(request):
 
     print(f"[DEBUG] /api/chat hit! session={session_id}, text='{user_text[:50]}...', index={question_index}")
     
+    is_tech = is_tech_job(job_text)
+    
+    # Coding challenge logic:
+    # Trigger after a few intro/technical questions if tech job.
+    # We'll trigger it around question index 3-4.
+    is_coding_phase = data.get('force_coding', False)
+    if not is_coding_phase and is_tech:
+        # If difficulty is high, maybe show twice. For now, let's target index 3.
+        coding_trigger_indices = [3]
+        if pressure_score > 70:
+            coding_trigger_indices = [3, 5]
+        
+        if question_index in coding_trigger_indices:
+            is_coding_phase = True
+
     # Load base persona prompt
     persona_prompt = "You are a professional technical interviewer for AceIt."
     if interviewer_persona_id:
@@ -478,6 +501,17 @@ async def chat(request):
             "You give zero positive reinforcement. Dismantle their system design ruthlessly."
         )
 
+    # Conversational Mode for Coding Challenge
+    if is_coding_phase:
+        difficulty_mode = (
+            "CONVERSATIONAL MODE: You are guiding the candidate through a live coding challenge in Python. "
+            "You must NOT divulge the solution or write code for them. "
+            "Instead, talk with them to understand their thought process. "
+            "Ask clarifying questions about their approach, edge cases, or complexity. "
+            "Your goal is to evaluate BOTH the end result (code) and their reasoning. "
+            "Be inquisitive but firm. If they struggle, give subtle hints but never the answer."
+        )
+
     # Trend modifier: if score is rising fast, lean harder into the tier
     trend_modifier = ""
     if pressure_trend == "rising":
@@ -505,8 +539,16 @@ async def chat(request):
         "- 0.9-1.0: Mastery. Exceptional depth, trade-offs, scalability, and specific advanced technical concepts.\n"
         "\n"
         "At the VERY END of your response, you MUST output a score tag in this EXACT format: [SCORE: 0.95]. "
-        "DO NOT SKIP THIS TAG."
     )
+    if is_coding_phase:
+        system_prompt += (
+            "\n\nLIVE CODING CONTEXT:\n"
+            f"Current Python Code: \n```python\n{current_code}\n```\n"
+            "Evaluate the code quality and the candidate's explanation. "
+            "If the code is incomplete, that's okay, you are in-progress. "
+            "Encourage them to continue or explain a specific part."
+        )
+
     # Determine if this is the start of the interview
     # If question_index is 0 and user_text is empty, it's a fallback for the intro
     is_initial = (question_index == 0 and not user_text.strip())
@@ -523,6 +565,15 @@ async def chat(request):
         )
         is_finished = False
         next_index = 0
+    elif is_coding_phase:
+        # Coding Challenge Prompt
+        prompt = (
+            f"The candidate is in a coding challenge. Their current code is: {current_code}. "
+            f"They said: '{user_text}'. React to their thought process and ask a guiding question "
+            "to help them move forward or justify a decision."
+        )
+        is_finished = False
+        next_index = question_index + 1
     elif float(timestamp_sec) < 260.0:
         # ── INTERMEDIATE PROMPT: TECHNICAL FOLLOW-UP ───────────────────────────────
         prompt = (
@@ -610,7 +661,7 @@ async def chat(request):
 
         # Send metadata at the end including the quality score A
         print(f"[DEBUG] Gemini stream complete. Total text length: {len(full_ai_response)}, score: {quality_score}")
-        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished})}\n\n".encode())
+        await response.write(f"data: {json.dumps({'done': True, 'full_text': full_ai_response, 'quality_score': quality_score, 'next_index': next_index, 'is_finished': is_finished, 'is_coding_phase': is_coding_phase})}\n\n".encode())
 
         # ── BACKGROUND: Supabase Logging & Analysis ──
         # Skip logging if this was a "safe skip" (empty response after intro)
