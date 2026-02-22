@@ -322,7 +322,7 @@ async def init_session(request):
     system_prompt = (
         f"{persona_prompt}\n\n"
         "Based on the candidate's resume and the job description, "
-        "introduce yourself briefly and ask the first most relevant interview question. "
+        "introduce yourself briefly and ask an introductory question about their background. "
         "Keep it professional and concise (under 3 sentences)."
     )
     user_prompt = f"Resume:\n{resume_text}\n\nJob Description:\n{job_description}"
@@ -446,13 +446,13 @@ async def chat(request):
         "First, react to the candidate's last answer in 1 sentence (do not be generic). "
         f"Context - Job Description: {job_text[:300]}... Resume Summary: {resume_text[:300]}..."
     )
-
+    
     if question_index < 5:
-        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then ask a relevant follow-up question appropriate for your current difficulty tier."
+        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then ask a relevant follow-up question."
         is_finished = False
         next_index = question_index + 1
     else:
-        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then bring the interview to a close."
+        prompt = f"The candidate said: '{user_text}'. React to their answer in one sentence, then thank them and conclude the interview."
         is_finished = True
         next_index = question_index
 
