@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  transpilePackages: ["@met4citizen/talkinghead"],
   async rewrites() {
     return [
       {
@@ -8,6 +9,9 @@ const nextConfig: NextConfig = {
         destination: "http://localhost:8080/api/:path*",
       },
     ];
+  },
+  webpack: (config) => {
+    return config;
   },
 };
 

@@ -509,14 +509,37 @@ async def tts(request):
     data = await request.json()
     text = data.get('text', '')
     try:
+        from elevenlabs.client import ElevenLabs
+        eleven_client = ElevenLabs(api_key=os.getenv("ELEVEN_API_KEY"))
+        
+        # We can use a specific voice ID or name
+        # For now, let's use a default professional voice ID
+        # "pNInz6obpgnuM07pZQX8" is 'Adam' (a high quality professional voice)
+        audio_stream = eleven_client.text_to_speech.convert(
+            text=text,
+            voice_id="pNInz6obpgDQGcFmaJgB", # Adam
+            model_id="eleven_multilingual_v2",
+            output_format="mp3_44100_128"
+        )
+        
         temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4().hex}.mp3")
-        # Run synchronous TTS via to_thread to avoid event loop blocking
-        def _sync_tts():
-            with sync_client.audio.speech.with_streaming_response.create(model="tts-1", voice="nova", input=text) as response:
-                response.stream_to_file(temp_audio)
-        await asyncio.to_thread(_sync_tts)
+        # Run ElevenLabs TTS in a thread to avoid blocking the event loop
+        def _generate_eleven():
+            audio_stream = eleven_client.text_to_speech.convert(
+                text=text,
+                voice_id="pNInz6obpgDQGcFmaJgB", # Adam
+                model_id="eleven_multilingual_v2",
+                output_format="mp3_44100_128"
+            )
+            with open(temp_audio, "wb") as f:
+                for chunk in audio_stream:
+                    f.write(chunk)
+                    
+        await asyncio.to_thread(_generate_eleven)
+
         return web.FileResponse(temp_audio)
     except Exception as e:
+        logger.error(f"ElevenLabs TTS Error: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
 async def offer(request):
@@ -616,6 +639,51 @@ async def get_session_data_handler(request):
         "metadata": metadata
     })
 
+async def save_session_handler(request):
+    try:
+        data = await request.json()
+        session_id = data.get('session_id') or data.get('id') # Support both naming conventions
+        user_id = data.get('user_id')
+        role = data.get('role', 'Software Engineer')
+        company = data.get('company', 'AceIt')
+        
+        # Metrics
+        score = data.get('score', 0)
+        gaze = data.get('gaze', 0)
+        confidence = data.get('confidence', 0)
+        composure = data.get('composure', 0)
+        spikes = data.get('spikes', 0)
+        date = data.get('date')
+
+        if not session_id:
+            return web.json_response({"error": "No session_id provided"}, status=400)
+            
+        supabase_logger.save_session_metadata(
+            session_id=session_id,
+            role=role,
+            company=company,
+            user_id=user_id,
+            score=score,
+            gaze=gaze,
+            confidence=confidence,
+            composure=composure,
+            spikes=spikes,
+            date=date
+        )
+        
+        return web.json_response({"status": "success", "session_id": session_id})
+    except Exception as e:
+        logger.error(f"Save session error: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+async def get_sessions_handler(request):
+    user_id = request.query.get('user_id')
+    if not user_id:
+        return web.json_response({"error": "No user_id provided"}, status=400)
+    
+    sessions = supabase_logger.get_user_sessions(user_id)
+    return web.json_response({"data": sessions})
+
 async def get_session_details_handler(request):
     session_id = request.query.get('session_id')
     if not session_id:
@@ -625,13 +693,6 @@ async def get_session_details_handler(request):
     if not metadata:
         return web.json_response({"error": "Session not found"}, status=404)
         
-    # Also fetch data for the old dashboard logic if needed
-    report = supabase_logger.get_report(session_id)
-    keyframes = supabase_logger.get_keyframes(session_id)
-    
-    # Map keyframes back to what the frontend expects for biometrics/transcript if needed
-    # but the report page fetch already does this from /api/session/{id}/data
-    
     return web.json_response({"data": metadata})
 
 async def on_shutdown(app):
@@ -682,6 +743,8 @@ if __name__ == "__main__":
         app.router.add_get("/api/report/{session_id}", get_report_handler)
         app.router.add_get("/api/session/{session_id}/data", get_session_data_handler)
         app.router.add_get("/api/get-session-details", get_session_details_handler)
+        app.router.add_post("/api/save-session", save_session_handler)
+        app.router.add_get("/api/get-sessions", get_sessions_handler)
 
         # Add CORS to all routes
         for route in list(app.router.routes()):

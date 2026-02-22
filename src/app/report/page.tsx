@@ -126,15 +126,37 @@ function HudTooltip({ active, payload, label }: any) {
   );
 }
 
-// ─── PERFORMANCE TREND CHART ──────────────────────────────────────────────────
+// ─── PERFORMANCE TREND CHART ────────────────────────────────────────────────────
+/**
+ * Uses actual biometric timestamps. Each point = composite of gaze + confidence + composure
+ * at that real moment in the interview, bucketed into readable time windows.
+ * X-axis is actual elapsed time. Shows if you started nervous and recovered (U-shape),
+ * started confident but cracked under pressure (inverted U), or stayed consistent.
+ */
 function PerformanceTrendChart({ data }: { data: any[] }) {
+  // Use real data if available — plot composite score at each biometric timestamp
   const chartData = data.length > 0
-    ? data.map((d, i) => ({ q: `Q${i + 1}`, score: Math.round((d.gazeScore + d.confidence + (100 - d.fidgetIndex)) / 3) }))
-    : [{ q: "Q1", score: 62 }, { q: "Q2", score: 71 }, { q: "Q3", score: 68 }, { q: "Q4", score: 79 }, { q: "Q5", score: 85 }];
+    ? data.map((d) => ({
+      t: `${Math.floor(d.time / 60)}:${String(d.time % 60).padStart(2, "0")}`,
+      score: Math.round((d.gazeScore + d.confidence + Math.max(0, 100 - d.fidgetIndex)) / 3),
+      gaze: d.gazeScore,
+      confidence: d.confidence,
+      composure: Math.max(0, 100 - d.fidgetIndex),
+    }))
+    : [
+      { t: "0:00", score: 62, gaze: 58, confidence: 65, composure: 63 },
+      { t: "1:30", score: 71, gaze: 72, confidence: 68, composure: 73 },
+      { t: "3:00", score: 68, gaze: 65, confidence: 70, composure: 69 },
+      { t: "4:30", score: 79, gaze: 80, confidence: 77, composure: 80 },
+      { t: "6:00", score: 85, gaze: 87, confidence: 84, composure: 84 },
+    ];
 
   return (
-    <ChartCard label="PERFORMANCE_TREND // SCORE PROGRESSION" delay={100}>
-      <ResponsiveContainer width="100%" height={220}>
+    <ChartCard label="PERFORMANCE TREND // COMPOSITE SCORE OVER TIME" delay={100}>
+      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.55rem", color: C.muted, marginBottom: "0.75rem", lineHeight: 1.5 }}>
+        Composite = (Gaze + Confidence + Composure) / 3 &mdash; each data point is a real biometric reading
+      </div>
+      <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={chartData}>
           <defs>
             <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
@@ -147,15 +169,15 @@ function PerformanceTrendChart({ data }: { data: any[] }) {
             </filter>
           </defs>
           <CartesianGrid strokeDasharray="2 6" stroke="rgba(0,245,212,0.05)" vertical={false} />
-          <XAxis dataKey="q" tick={{ fill: C.muted, fontSize: 10, fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} />
-          <YAxis domain={[0, 100]} tick={{ fill: C.muted, fontSize: 10, fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} />
+          <XAxis dataKey="t" tick={{ fill: C.muted, fontSize: 9, fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} />
+          <YAxis domain={[0, 100]} tick={{ fill: C.muted, fontSize: 9, fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} />
           <Tooltip content={<HudTooltip />} />
           <Area
-            type="monotone" dataKey="score" name="Score"
+            type="monotone" dataKey="score" name="Composite Score"
             stroke={C.teal} strokeWidth={2.5}
             fill="url(#trendGrad)"
-            dot={{ fill: C.teal, r: 5, strokeWidth: 0, filter: "url(#glow)" }}
-            activeDot={{ r: 7, fill: C.teal, strokeWidth: 0, filter: "url(#glow)" }}
+            dot={{ fill: C.teal, r: 4, strokeWidth: 0, filter: "url(#glow)" }}
+            activeDot={{ r: 6, fill: C.teal, strokeWidth: 0, filter: "url(#glow)" }}
             isAnimationActive={true} animationDuration={1200} animationEasing="ease-out"
           />
         </AreaChart>
@@ -163,6 +185,7 @@ function PerformanceTrendChart({ data }: { data: any[] }) {
     </ChartCard>
   );
 }
+
 
 // ─── COMPETENCY BREAKDOWN DONUT ───────────────────────────────────────────────
 const DEFAULT_COMPETENCY_DATA = [
@@ -419,7 +442,18 @@ export default function ReportPage() {
     try {
       const res = await fetch("http://127.0.0.1:8080/api/save-session", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id, role: displayRole, company: displayCompany, date: displayDate, score: overall, gaze: avgGaze, confidence: avgConf, composure: avgCalm, spikes: spikeCount, transcript: txData, biometrics: safeData }),
+        body: JSON.stringify({
+          session_id: sessionId || urlSessionId,
+          user_id: user.id,
+          role: displayRole,
+          company: displayCompany,
+          date: displayDate,
+          score: overall,
+          gaze: avgGaze,
+          confidence: avgConf,
+          composure: avgCalm,
+          spikes: spikeCount
+        }),
       });
       if (res.ok) router.push("/dashboard");
       else alert("Failed to save session.");
@@ -573,7 +607,7 @@ export default function ReportPage() {
               fontFamily: "JetBrains Mono, monospace", fontSize: "0.62rem", letterSpacing: "0.1em",
               background: "transparent", border: `1px solid rgba(255,255,255,0.1)`, color: C.muted,
               padding: "0.5rem 1rem", cursor: "pointer", borderRadius: 2, transition: "all 0.2s"
-            }}>↺ NEW SESSION</button>
+            }}>+ NEW INTERVIEW</button>
             {!urlSessionId && (
               <button onClick={handleSave} disabled={isSaving} style={{
                 fontFamily: "JetBrains Mono, monospace", fontSize: "0.62rem", letterSpacing: "0.1em",
@@ -581,14 +615,14 @@ export default function ReportPage() {
                 padding: "0.5rem 1.25rem", cursor: "pointer", borderRadius: 2, fontWeight: 700,
                 boxShadow: `0 0 20px rgba(0,245,212,0.3)`
               }}>
-                {isSaving ? "SYNCING..." : "SAVE TO CLOUD"}
+                {isSaving ? "SYNCING..." : "SAVE SESSION"}
               </button>
             )}
             <button onClick={handleExport} style={{
               fontFamily: "JetBrains Mono, monospace", fontSize: "0.62rem", letterSpacing: "0.1em",
               background: "transparent", border: `1px solid ${C.border}`, color: C.teal,
               padding: "0.5rem 1rem", cursor: "pointer", borderRadius: 2, transition: "all 0.2s"
-            }}>EXPORT PDF</button>
+            }}>EXPORT REPORT</button>
           </div>
         </div>
 

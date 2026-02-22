@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useInterviewStore } from "@/store/useInterviewStore";
+import Avatar, { AvatarHandle } from "@/components/Avatar";
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 function CameraIcon({ off }: { off: boolean }) {
@@ -97,21 +98,21 @@ function PressureGauge({ score, trend }: { score: number; trend: "rising" | "fal
   return (
     <div style={{ width: "100%", padding: "0.75rem 1.5rem", background: "rgba(0,0,0,0.3)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
-        <div>
+        <div style={{ zIndex: 3 }}>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: "rgba(255,255,255,0.25)", letterSpacing: "0.15em", marginBottom: "0.2rem" }}>DIFFICULTY_ENGINE</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.7rem", color, fontWeight: 800, letterSpacing: "0.08em" }}>{label}</span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.5rem", color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em" }}>{sub}</span>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", zIndex: 3 }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.55rem", color: trendColor, fontWeight: 800 }}>{trendIcon}</span>
           <span style={{ fontFamily: "var(--font-display)", fontSize: "1.6rem", color, lineHeight: 1 }}>{Math.round(score)}</span>
         </div>
       </div>
 
       {/* Track */}
-      <div style={{ height: "3px", width: "100%", background: "rgba(255,255,255,0.06)", borderRadius: "2px", position: "relative", overflow: "hidden" }}>
+      <div style={{ height: "3px", width: "100%", background: "rgba(255,255,255,0.06)", borderRadius: "2px", position: "relative", overflow: "hidden", zIndex: 3 }}>
         <div style={{
           height: "100%",
           width: `${score}%`,
@@ -125,19 +126,6 @@ function PressureGauge({ score, trend }: { score: number; trend: "rising" | "fal
 }
 
 // ─── CHESS ENGINE SCORING RUBRIC ────────────────────────────────────────────────────
-/**
- * All signals use continuous tanh (sigmoid) functions — no if/else thresholds.
- * sig(x, center, slope) = tanh((x - center) / slope)
- * Values span (-1, +1) with a smooth, differentiable gradient.
- *
- * Calibration table:
- *   depthScore:       10 words → -0.78  |  35 words → 0     |  80 words → +0.86
- *   techScore:        0 hits   → -0.71  |  2 hits   → +0.29 |  5 hits  → +0.95
- *   specificityScore: 0 marks  → -0.59  |  2 marks  → +0.57 |  4 marks → +0.93
- *   structureScore:   1 sent   → -0.76  |  2 sents  → 0     |  3+ sents → +0.76
- *
- * Pressure update uses ELO formula (see store).
- */
 function scorePerformance(text: string): number {
   const lower = text.toLowerCase();
   const wordCount = text.trim().split(/\s+/).length;
@@ -147,10 +135,7 @@ function scorePerformance(text: string): number {
   const sig = (x: number, center: number, slope: number) =>
     Math.tanh((x - center) / slope);
 
-  // ── Signal 1: DEPTH — center=35 words, slope=25 ──────────────────────────────
   const depthScore = sig(wordCount, 35, 25);
-
-  // ── Signal 2: TECHNICAL DENSITY ───────────────────────────────────────────
   const techKeywords = [
     "algorithm", "complexity", "architecture", "scalability", "latency",
     "throughput", "trade-off", "tradeoff", "distributed", "consistency",
@@ -160,10 +145,8 @@ function scorePerformance(text: string): number {
     "time complexity", "space complexity", "o(n"
   ];
   const techHits = techKeywords.filter(k => lower.includes(k)).length;
-  // ── center=1.5 hits, slope=1.5: 0 → -0.71, 2 → +0.29, 5 → +0.95 ─────────────
   const techScore = sig(techHits, 1.5, 1.5);
 
-  // ── Signal 3: SPECIFICITY (concrete examples, numbers, names) ─────────────
   const specificityMarkers = [
     "specifically", "for example", "for instance", "such as", "in particular",
     "we used", "i built", "i led", "i reduced", "i increased", "resulted in",
@@ -171,20 +154,15 @@ function scorePerformance(text: string): number {
   ];
   const numberHits = (text.match(/\b\d+(\.\d+)?[kmb%]?\b/gi) || []).length;
   const specificityHits = specificityMarkers.filter(m => lower.includes(m)).length + numberHits;
-  // ── center=1 hit, slope=1.2: 0 → -0.59, 2 → +0.57, 4 → +0.93 ─────────────────
   const specificityScore = sig(specificityHits, 1, 1.2);
 
-  // ── Signal 4: STRUCTURE — center=2 sentences, slope=1 ────────────────────
   const structureScore = sig(sentenceCount, 2, 1);
 
-  // ── Signal 5: FILLER PENALTY ──────────────────────────────────────────────
   const fillers = ["um", "uh", "like", "you know", "basically", "kind of", "sort of", "i mean"];
   const fillerCount = fillers.filter(f => lower.includes(f)).length;
-  // Continuous density penalty: tanh(filler_rate * 3), never discrete ─────────────
   const fillerDensity = fillerCount / Math.max(1, wordCount / 10);
   const fillerPenalty = Math.tanh(fillerDensity * 3);
 
-  // ── Weighted Composite (dot product of all signals) ───────────────────────
   const raw = (
     depthScore * 0.35 +
     techScore * 0.30 +
@@ -196,24 +174,43 @@ function scorePerformance(text: string): number {
 }
 
 // ─── AI AVATAR PANEL (top half) ───────────────────────────────────────────────
-function AvatarPanel({ isSpeaking, pressureScore, pressureTrend }: { isSpeaking: boolean, pressureScore: number, pressureTrend: "rising" | "falling" | "stable" }) {
+function AvatarPanel({
+  isSpeaking,
+  avatarRef,
+  onAudioStart,
+  onAudioEnd,
+  pressureScore,
+  pressureTrend
+}: {
+  isSpeaking: boolean;
+  avatarRef: React.RefObject<AvatarHandle | null>;
+  onAudioStart: () => void;
+  onAudioEnd: () => void;
+  pressureScore: number;
+  pressureTrend: "rising" | "falling" | "stable";
+}) {
   return (
     <div style={{ position: "relative", width: "100%", flex: 1, background: "linear-gradient(135deg, #050508 0%, #0a0a0f 100%)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
       <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(202,255,0,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(202,255,0,0.02) 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
 
-      <div style={{ position: "relative", width: "100px", height: "100px", borderRadius: "2px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "2.5rem", boxShadow: isSpeaking ? "0 0 40px rgba(202,255,0,0.15)" : "none", transition: "all 0.3s ease" }}>
-        🤖
-        {isSpeaking && (
-          <div style={{ position: "absolute", inset: "-8px", border: "1px solid var(--accent)", animation: "pulse-ring 1.5s ease-out infinite" }} />
-        )}
+      <div style={{ position: "absolute", inset: 0, zIndex: 1 }}>
+        <Avatar
+          ref={avatarRef}
+          onAudioStart={onAudioStart}
+          onAudioEnd={onAudioEnd}
+        />
       </div>
 
-      <div style={{ marginTop: "1rem", fontWeight: 800, letterSpacing: "0.2em", position: "relative", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "#fff" }}>NEURAL_INTERVIEWER_V2</div>
-      <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--accent)" : "rgba(255,255,255,0.3)", fontSize: "0.6rem", letterSpacing: "0.1em" }}>
-        {isSpeaking ? "STATUS // TRANSMITTING" : "STATUS // CAPTURING"}
+      <div style={{ position: "absolute", top: "1rem", right: "1rem", zIndex: 2, display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+        <div style={{ fontWeight: 800, letterSpacing: "0.2em", position: "relative", fontFamily: "var(--font-mono)", fontSize: "0.7rem", color: "#fff", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>NEURAL_INTERVIEWER_V2</div>
+        <div className="label" style={{ marginTop: "0.25rem", position: "relative", color: isSpeaking ? "var(--accent)" : "rgba(255,255,255,0.3)", fontSize: "0.6rem", letterSpacing: "0.1em" }}>
+          {isSpeaking ? "STATUS // TRANSMITTING" : "STATUS // CAPTURING"}
+        </div>
       </div>
 
-      <PressureGauge score={pressureScore} trend={pressureTrend} />
+      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 2 }}>
+        <PressureGauge score={pressureScore} trend={pressureTrend} />
+      </div>
     </div>
   );
 }
@@ -433,39 +430,51 @@ function ConnectionBadge({ status }: { status: "connecting" | "connected" | "fai
 
 // ─── AUDIO QUEUE HELPER ──────────────────────────────────────────────────────
 class AudioQueue {
-  private queue: string[] = [];
+  private queue: { url: string; text: string }[] = [];
   private isPlaying = false;
   private onEnd: () => void;
-  private audio: HTMLAudioElement | null = null;
+  private avatarRef: React.RefObject<AvatarHandle | null>;
 
-  constructor(onEnd: () => void) {
+  constructor(onEnd: () => void, avatarRef: React.RefObject<AvatarHandle | null>) {
     this.onEnd = onEnd;
+    this.avatarRef = avatarRef;
   }
 
-  add(url: string) {
-    this.queue.push(url);
+  add(url: string, text: string) {
+    this.queue.push({ url, text });
     if (!this.isPlaying) this.playNext();
   }
 
-  private playNext() {
+  private async playNext() {
     if (this.queue.length === 0) {
       this.isPlaying = false;
       this.onEnd();
       return;
     }
     this.isPlaying = true;
-    this.audio = new Audio(this.queue.shift());
-    this.audio.onended = () => this.playNext();
-    this.audio.play().catch(e => console.error("Audio playback failed", e));
+    const item = this.queue.shift();
+    if (item && this.avatarRef.current) {
+      // Use TalkingHead's speak method
+      await this.avatarRef.current.speak(item.url, item.text);
+      // The actual end of playback should be signaled by TalkingHead, 
+      // but TalkingHead's onEnd is passed to speakText.
+      // So TalkingHead will call this.onEnd when it's done.
+    } else {
+      // Fallback or skip
+      this.playNext();
+    }
+  }
+
+  // TalkingHead will signal end, so we need a way to trigger playNext
+  signalEnd() {
+    this.playNext();
   }
 
   stop() {
-    if (this.audio) {
-      this.audio.pause();
-      this.audio = null;
-    }
     this.queue = [];
     this.isPlaying = false;
+    // TalkingHead doesn't have a simple stop yet in our wrapper, 
+    // but clearing the queue prevents next plays.
   }
 }
 
@@ -498,6 +507,7 @@ export default function InterviewPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [questionIndex, setQuestionIndex] = useState(0);
 
+  const avatarRef = useRef<AvatarHandle | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -522,7 +532,7 @@ export default function InterviewPage() {
 
     setIsProcessing(true);
     if (!audioQueueRef.current) {
-      audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false));
+      audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
     }
     audioQueueRef.current.stop();
 
@@ -572,17 +582,30 @@ export default function InterviewPage() {
 
         let sentenceBuffer = "";
         let doneMetadata: any = null;
+        let streamBuffer = ""; // Accumulate text across chunks
 
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
+          streamBuffer += decoder.decode(value, { stream: true });
+          const lines = streamBuffer.split('\n');
+          // Keep the last incomplete line in the buffer
+          streamBuffer = lines.pop() || "";
 
           for (const line of lines) {
             if (line.startsWith('data: ')) {
-              const data = JSON.parse(line.slice(6));
+              const dataStr = line.slice(6).trim();
+              if (!dataStr || dataStr === '[DONE]') continue;
+
+              let data;
+              try {
+                data = JSON.parse(dataStr);
+              } catch (e) {
+                console.error("Failed to parse SSE JSON:", dataStr, e);
+                continue;
+              }
+
               if (data.token) {
                 updateLastTranscriptText(data.token);
                 sentenceBuffer += data.token;
@@ -599,7 +622,7 @@ export default function InterviewPage() {
                     body: JSON.stringify({ text: fragment }),
                   }).then(r => r.blob()).then(blob => {
                     if (audioQueueRef.current) {
-                      audioQueueRef.current.add(URL.createObjectURL(blob));
+                      audioQueueRef.current.add(URL.createObjectURL(blob), fragment);
                     }
                   });
                 }
@@ -619,7 +642,7 @@ export default function InterviewPage() {
             body: JSON.stringify({ text: fragment }),
           }).then(r => r.blob()).then(blob => {
             if (audioQueueRef.current) {
-              audioQueueRef.current.add(URL.createObjectURL(blob));
+              audioQueueRef.current.add(URL.createObjectURL(blob), fragment);
             }
           });
         }
@@ -908,6 +931,31 @@ export default function InterviewPage() {
 
   useEffect(() => { if (phase === "live") setIsReady(true); }, [phase]);
 
+  // ── Debug TTS ─────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as any).debugSpeak = (text: string) => {
+        if (!audioQueueRef.current) {
+          audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
+        }
+        setIsSpeaking(true);
+        fetch('http://127.0.0.1:8080/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        }).then(r => r.blob()).then(blob => {
+          if (audioQueueRef.current) {
+            audioQueueRef.current.add(URL.createObjectURL(blob), text);
+          }
+        }).catch(err => {
+          console.error("Debug speak failed:", err);
+          setIsSpeaking(false);
+        });
+      };
+    }
+  }, [avatarRef, setIsSpeaking]);
+
+
   // ── Timer — only runs once isReady is true ────────────────────────────────
   useEffect(() => {
     if (!isReady) return;
@@ -918,7 +966,7 @@ export default function InterviewPage() {
       const firstText = transcript[0].text;
       if (firstText) {
         if (!audioQueueRef.current) {
-          audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false));
+          audioQueueRef.current = new AudioQueue(() => setIsSpeaking(false), avatarRef);
         }
         setIsSpeaking(true);
         fetch('http://127.0.0.1:8080/api/tts', {
@@ -927,7 +975,7 @@ export default function InterviewPage() {
           body: JSON.stringify({ text: firstText }),
         }).then(r => r.blob()).then(blob => {
           if (audioQueueRef.current) {
-            audioQueueRef.current.add(URL.createObjectURL(blob));
+            audioQueueRef.current.add(URL.createObjectURL(blob), firstText);
           }
         });
       }
@@ -1005,7 +1053,14 @@ export default function InterviewPage() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           <div style={{ display: "flex", flexDirection: "column", borderRadius: "12px", overflow: "hidden", border: "1px solid var(--border)", aspectRatio: "4/3" }}>
-            <AvatarPanel isSpeaking={isSpeaking} pressureScore={pressureScore} pressureTrend={pressureTrend} />
+            <AvatarPanel
+              isSpeaking={isSpeaking}
+              avatarRef={avatarRef}
+              onAudioStart={() => setIsSpeaking(true)}
+              onAudioEnd={() => audioQueueRef.current?.signalEnd()}
+              pressureScore={pressureScore}
+              pressureTrend={pressureTrend}
+            />
             <div style={{ height: "1px", background: "var(--border)", flexShrink: 0 }} />
             <CameraPanel
               videoRef={localVideoRef}
@@ -1025,9 +1080,9 @@ export default function InterviewPage() {
               confidence={confidence}
               fidget={fidget}
             />
-          </div>
+          </div >
 
-        </div>
+        </div >
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", overflow: "hidden" }}>
           <div className="card" style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", padding: "1rem" }}>
@@ -1052,7 +1107,7 @@ export default function InterviewPage() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   );
 }
